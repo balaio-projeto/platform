@@ -1,0 +1,12 @@
+info:
+  name: Listar peças
+  type: http
+  seq: 1
+http:
+  method: GET
+  url: '{{baseUrl}}/api/v1/pecas'
+  headers:
+    - name: Accept
+      value: application/json
+settings:
+  encodeUrl: true
