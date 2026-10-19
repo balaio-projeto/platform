@@ -1,33 +1,78 @@
 # Platform Balaio
 
-Repositório para reunir configurações e recursos compartilhados do desenvolvimento local dos serviços do Balaio. A aplicação continua dividida entre repositórios independentes: `api-gateway`, `catalog-service`, `profile-service`, `commerce-service`, `community-service` e `events-service`.
+Repositório de apoio ao desenvolvimento local do Balaio. Os serviços continuam em repositórios independentes; este Compose constrói as imagens locais e inicia a fatia integrada atual.
 
-## Escopo inicial
+## Serviços iniciados
 
-- Centralizar orientações e arquivos de apoio ao ambiente local.
-- Manter a collection Bruno usada para validar as rotas pelo gateway.
-- Servir de ponto de integração para a configuração Docker Compose, que será adicionada na história atribuída a outro membro da equipe.
+| Serviço | Porta no computador | Função |
+| --- | ---: | --- |
+| Frontend | 4321 | Next.js; as áreas ainda não integradas continuam usando a Fake API incluída na imagem do frontend |
+| API Gateway | 8080 | Entrada HTTP do frontend e encaminhamento para o catálogo |
+| Catalog service | 8081 | Consulta e persistência das peças |
+| PostgreSQL | 5433 | Banco do catálogo; a porta interna do container continua 5432 |
 
-## Collection Bruno
+O banco do Compose é separado do PostgreSQL instalado no computador. O mapeamento padrão usa a porta 5433 para evitar conflito com a instância local que normalmente ocupa a 5432. O catálogo tem seu próprio usuário e banco. O volume `catalog-db-data` mantém os dados entre reinicializações.
 
-A collection em `bruno/balaio-api` começa com a listagem de peças pelo gateway:
+## Organização local
 
-```http
-GET http://localhost:8080/api/v1/pecas
+Clone os repositórios lado a lado, mantendo esta estrutura:
+
+```text
+Repo/
+├── Balaio/Frontend/
+├── api-gateway/
+├── catalog-service/
+└── platform/
 ```
 
-O ambiente `Local` define `baseUrl` como `http://localhost:8080`. Abra a pasta `bruno/balaio-api` no Bruno e selecione esse ambiente. A collection usa OpenCollection YAML e requer uma versão do Bruno com suporte a esse formato.
+O Compose usa os repositórios do gateway, catálogo e frontend como contextos de build. Cada aplicação é construída em uma imagem separada.
 
-## Configuração local
+## Primeiro uso
 
-Use `.env.example` como referência para configurar as variáveis de ambiente nos perfis de execução locais dos serviços. Copie os valores para o mecanismo de configuração da sua IDE ou terminal e substitua o placeholder da senha por uma credencial local. O arquivo `.env` é ignorado pelo Git.
+No PowerShell, dentro da pasta `platform`:
 
-Ao executar os serviços diretamente pela IDE, Spring Boot não carrega automaticamente um arquivo `.env`; configure as variáveis no perfil de execução. A forma de carregá-las pelo Docker Compose será documentada quando a configuração compartilhada for integrada.
+```powershell
+Copy-Item .env.example .env
+```
 
-## Fluxo atual de catálogo
+Edite `.env` e substitua `CATALOG_DB_PASSWORD` e `POSTGRES_ADMIN_PASSWORD` por senhas locais. Se a porta 5433 já estiver ocupada, altere `CATALOG_DB_HOST_PORT`.
 
-1. O frontend chama `GET /api/v1/pecas` no `api-gateway`.
-2. O gateway encaminha a requisição ao `catalog-service`.
-3. O `catalog-service` consulta seu PostgreSQL e devolve a resposta do catálogo.
+Suba a aplicação:
 
-Cada serviço permanece responsável pelos dados do próprio domínio. O gateway é a entrada HTTP do frontend e não acessa o banco de dados dos serviços.
+```powershell
+docker compose up --build
+```
+
+Abra `http://localhost:4321/search`. O frontend chama o gateway pela rede interna do Compose. Para testar a mesma rota pelo Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`. O ambiente `Catalog local` acessa diretamente `http://localhost:8081/api/v1/pecas`.
+
+A primeira inicialização cria o banco `balaio_catalog` e o usuário da aplicação. Em seguida, o Flyway do catálogo aplica as migrações e os dados iniciais.
+
+## Comandos úteis
+
+```powershell
+docker compose ps
+docker compose logs -f frontend api-gateway catalog-service
+docker compose down
+```
+
+`docker compose down` mantém os dados do banco no volume. Para apagar o banco descartável do Compose e recriá-lo do zero:
+
+```powershell
+docker compose down -v
+```
+
+Esse último comando remove os dados persistidos pelo Compose.
+
+## Rede e variáveis
+
+Dentro da rede do Compose, o gateway acessa `http://catalog-service:8081`, o catálogo acessa `catalog-db:5432` e o frontend acessa `http://api-gateway:8080/api/v1`. Esses endereços usam os nomes dos serviços; dentro de um container, `localhost` aponta para o próprio container.
+
+O Compose sobrescreve a URL do banco e do catálogo para usar esses nomes internos. Para executar os serviços diretamente pela IDE, configure as variáveis do `.env` no perfil de execução. O Spring Boot não carrega automaticamente o arquivo `.env`.
+
+## Bruno
+
+A collection está em `bruno/balaio-api` e contém a listagem de peças. Use `Local` para testar pelo gateway e `Catalog local` para testar o serviço sem gateway.
+
+## Escopo
+
+Este ambiente local inicia frontend, gateway, catálogo e banco do catálogo. As demais rotas do frontend permanecem na Fake API até a integração dos respectivos serviços. Novos serviços podem ser adicionados ao Compose à medida que suas APIs e configurações locais estiverem prontas.

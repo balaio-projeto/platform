@@ -1,1 +1,69 @@
-services: {}
+name: balaio-local
+
+services:
+  catalog-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Configure POSTGRES_ADMIN_PASSWORD in .env}
+      CATALOG_DB_NAME: ${CATALOG_DB_NAME:-balaio_catalog}
+      CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Configure CATALOG_DB_PASSWORD in .env}
+    ports:
+      - "${CATALOG_DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - catalog-db-data:/var/lib/postgresql
+      - ./db/init/01-create-catalog-db.sh:/docker-entrypoint-initdb.d/01-create-catalog-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  catalog-service:
+    image: balaio/catalog-service:local
+    build:
+      context: ../catalog-service
+      dockerfile: Dockerfile
+    environment:
+      CATALOG_SERVICE_PORT: "8081"
+      CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/${CATALOG_DB_NAME:-balaio_catalog}
+      CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Configure CATALOG_DB_PASSWORD in .env}
+    ports:
+      - "8081:8081"
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+
+  api-gateway:
+    image: balaio/api-gateway:local
+    build:
+      context: ../api-gateway
+      dockerfile: Dockerfile
+    environment:
+      GATEWAY_PORT: "8080"
+      CATALOG_SERVICE_URL: http://catalog-service:8081
+    ports:
+      - "8080:8080"
+    depends_on:
+      catalog-service:
+        condition: service_healthy
+
+  frontend:
+    image: balaio/frontend:local
+    build:
+      context: ../Balaio/Frontend
+      dockerfile: Dockerfile
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8080/api/v1
+    ports:
+      - "4321:7879"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+volumes:
+  catalog-db-data:
