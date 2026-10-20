@@ -6,10 +6,10 @@ services:
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Configure POSTGRES_ADMIN_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-${DB_PASSWORD:-balaio}}
       CATALOG_DB_NAME: ${CATALOG_DB_NAME:-balaio_catalog}
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
-      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Configure CATALOG_DB_PASSWORD in .env}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
     ports:
       - "${CATALOG_DB_HOST_PORT:-5433}:5432"
     volumes:
@@ -31,9 +31,9 @@ services:
       CATALOG_SERVICE_PORT: "8081"
       CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/${CATALOG_DB_NAME:-balaio_catalog}
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
-      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Configure CATALOG_DB_PASSWORD in .env}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
     ports:
-      - "8081:8081"
+      - "${CATALOG_HOST_PORT:-8081}:8081"
     depends_on:
       catalog-db:
         condition: service_healthy
@@ -46,8 +46,12 @@ services:
     environment:
       GATEWAY_PORT: "8080"
       CATALOG_SERVICE_URL: http://catalog-service:8081
+      PROFILE_SERVICE_URL: http://profile-service:8082
+      COMMERCE_SERVICE_URL: http://commerce-service:8083
+      COMMUNITY_SERVICE_URL: http://community-service:8084
+      EVENTS_SERVICE_URL: http://events-service:8085
     ports:
-      - "8080:8080"
+      - "${GATEWAY_HOST_PORT:-8080}:8080"
     depends_on:
       catalog-service:
         condition: service_healthy
@@ -60,10 +64,154 @@ services:
     environment:
       API_GATEWAY_URL: http://api-gateway:8080/api/v1
     ports:
-      - "4321:7879"
+      - "${FRONTEND_HOST_PORT:-4321}:7879"
     depends_on:
       api-gateway:
         condition: service_healthy
 
+  profile-db:
+    profiles: [extended]
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: balaio_profile
+      POSTGRES_USER: balaio_profile_app
+      POSTGRES_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${PROFILE_DB_HOST_PORT:-5434}:5432"
+    volumes:
+      - profile-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balaio_profile_app -d balaio_profile"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  profile-service:
+    profiles: [extended]
+    image: balaio/profile-service:local
+    build:
+      context: ../profile-service
+      dockerfile: Dockerfile
+    environment:
+      PROFILE_SERVICE_PORT: "8082"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://profile-db:5432/balaio_profile
+      SPRING_DATASOURCE_USERNAME: balaio_profile_app
+      SPRING_DATASOURCE_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${PROFILE_HOST_PORT:-8082}:8082"
+    depends_on:
+      profile-db:
+        condition: service_healthy
+
+  commerce-db:
+    profiles: [extended]
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: balaio_commerce
+      POSTGRES_USER: balaio_commerce_app
+      POSTGRES_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${COMMERCE_DB_HOST_PORT:-5435}:5432"
+    volumes:
+      - commerce-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balaio_commerce_app -d balaio_commerce"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  commerce-service:
+    profiles: [extended]
+    image: balaio/commerce-service:local
+    build:
+      context: ../commerce-service
+      dockerfile: Dockerfile
+    environment:
+      COMMERCE_SERVICE_PORT: "8083"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://commerce-db:5432/balaio_commerce
+      SPRING_DATASOURCE_USERNAME: balaio_commerce_app
+      SPRING_DATASOURCE_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${COMMERCE_HOST_PORT:-8083}:8083"
+    depends_on:
+      commerce-db:
+        condition: service_healthy
+
+  community-db:
+    profiles: [extended]
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: balaio_community
+      POSTGRES_USER: balaio_community_app
+      POSTGRES_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${COMMUNITY_DB_HOST_PORT:-5436}:5432"
+    volumes:
+      - community-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balaio_community_app -d balaio_community"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  community-service:
+    profiles: [extended]
+    image: balaio/community-service:local
+    build:
+      context: ../community-service
+      dockerfile: Dockerfile
+    environment:
+      COMMUNITY_SERVICE_PORT: "8084"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://community-db:5432/balaio_community
+      SPRING_DATASOURCE_USERNAME: balaio_community_app
+      SPRING_DATASOURCE_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${COMMUNITY_HOST_PORT:-8084}:8084"
+    depends_on:
+      community-db:
+        condition: service_healthy
+
+  events-db:
+    profiles: [extended]
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: balaio_events
+      POSTGRES_USER: balaio_events_app
+      POSTGRES_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${EVENTS_DB_HOST_PORT:-5437}:5432"
+    volumes:
+      - events-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balaio_events_app -d balaio_events"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  events-service:
+    profiles: [extended]
+    image: balaio/events-service:local
+    build:
+      context: ../events-service
+      dockerfile: Dockerfile
+    environment:
+      EVENTS_SERVICE_PORT: "8085"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://events-db:5432/balaio_events
+      SPRING_DATASOURCE_USERNAME: balaio_events_app
+      SPRING_DATASOURCE_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+    ports:
+      - "${EVENTS_HOST_PORT:-8085}:8085"
+    depends_on:
+      events-db:
+        condition: service_healthy
+
 volumes:
   catalog-db-data:
+  profile-db-data:
+  commerce-db-data:
+  community-db-data:
+  events-db-data:

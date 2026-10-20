@@ -1,78 +1,89 @@
 # Platform Balaio
 
-Repositório de apoio ao desenvolvimento local do Balaio. Os serviços continuam em repositórios independentes; este Compose constrói as imagens locais e inicia a fatia integrada atual.
+Ambiente de desenvolvimento local do Balaio. Cada aplicação tem seu repositório e sua imagem. O Compose monta a rede, os bancos PostgreSQL e os containers que você escolher iniciar.
 
-## Serviços iniciados
-
-| Serviço | Porta no computador | Função |
-| --- | ---: | --- |
-| Frontend | 4321 | Next.js; as áreas ainda não integradas continuam usando a Fake API incluída na imagem do frontend |
-| API Gateway | 8080 | Entrada HTTP do frontend e encaminhamento para o catálogo |
-| Catalog service | 8081 | Consulta e persistência das peças |
-| PostgreSQL | 5433 | Banco do catálogo; a porta interna do container continua 5432 |
-
-O banco do Compose é separado do PostgreSQL instalado no computador. O mapeamento padrão usa a porta 5433 para evitar conflito com a instância local que normalmente ocupa a 5432. O catálogo tem seu próprio usuário e banco. O volume `catalog-db-data` mantém os dados entre reinicializações.
-
-## Organização local
-
-Clone os repositórios lado a lado, mantendo esta estrutura:
+## Repositórios lado a lado
 
 ```text
 Repo/
 ├── Balaio/Frontend/
 ├── api-gateway/
 ├── catalog-service/
+├── profile-service/
+├── commerce-service/
+├── community-service/
+├── events-service/
 └── platform/
 ```
 
-O Compose usa os repositórios do gateway, catálogo e frontend como contextos de build. Cada aplicação é construída em uma imagem separada.
+## O que é configurado automaticamente
+
+O `Dockerfile` de cada serviço constrói sua imagem e declara a porta interna; ele não cria banco nem publica portas no computador. O `docker-compose.yml` dá nome aos containers, conecta todos na mesma rede, publica as portas e fornece ao serviço a URL JDBC, o usuário e a senha do próprio banco. A imagem PostgreSQL cria os bancos e usuários na primeira inicialização dos respectivos volumes. O catálogo usa também seu script de inicialização para criar o banco e o usuário da aplicação.
+
+As portas internas e os nomes usados entre containers permanecem fixos. Para mudar apenas a porta acessada pelo computador, use as variáveis `*_HOST_PORT` do `.env.example`.
+
+## Serviços
+
+| Aplicação | Porta HTTP | Banco e porta no computador | Inicialização padrão |
+| --- | ---: | --- | --- |
+| Frontend | 4321 | — | Sim |
+| api-gateway | 8080 | — | Sim |
+| catalog-service | 8081 | catalog-db, 5433 | Sim |
+| profile-service | 8082 | profile-db, 5434 | Opcional |
+| commerce-service | 8083 | commerce-db, 5435 | Opcional |
+| community-service | 8084 | community-db, 5436 | Opcional |
+| events-service | 8085 | events-db, 5437 | Opcional |
+
+Cada serviço de negócio usa seu próprio banco e volume. Os bancos dos quatro serviços opcionais são novos containers; o banco e o volume existentes do catálogo permanecem os mesmos. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum deles está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
 ## Primeiro uso
 
-No PowerShell, dentro da pasta `platform`:
+Uma instalação nova não precisa de `.env`. No PowerShell, dentro de `platform`, inicie a fatia integrada atual:
+
+```powershell
+docker compose up --build -d
+```
+
+O Compose usa `balaio` como senha compartilhada de desenvolvimento e as portas da tabela acima. Se quiser outra senha ou outras portas no computador, copie `.env.example` para `.env` e altere apenas os valores desejados:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Edite `.env` e substitua `CATALOG_DB_PASSWORD` e `POSTGRES_ADMIN_PASSWORD` por senhas locais. Se a porta 5433 já estiver ocupada, altere `CATALOG_DB_HOST_PORT`.
+`DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
 
-Suba a aplicação:
+Se você já usa este ambiente, mantenha o `.env` atual: `POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD` e eventuais senhas individuais continuam aceitas e têm prioridade. Os volumes PostgreSQL já criados conservam as senhas antigas; adicionar ou mudar `DB_PASSWORD` sozinho não troca a senha gravada neles. Assim, o ambiente existente continua funcionando sem recriar bancos.
+
+Inicie os cinco serviços de negócio, os bancos, o gateway e o frontend:
 
 ```powershell
-docker compose up --build
+docker compose --profile extended up --build -d
 ```
 
-Abra `http://localhost:4321/search`. O frontend chama o gateway pela rede interna do Compose. Para testar a mesma rota pelo Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`. O ambiente `Catalog local` acessa diretamente `http://localhost:8081/api/v1/pecas`.
+Inicie só um serviço adicional e seu banco:
 
-A primeira inicialização cria o banco `balaio_catalog` e o usuário da aplicação. Em seguida, o Flyway do catálogo aplica as migrações e os dados iniciais.
+```powershell
+docker compose up --build -d profile-service
+```
+
+Troque `profile-service` por `commerce-service`, `community-service` ou `events-service` conforme o trabalho do dia. O Compose inicia o banco exigido pelo serviço escolhido. Depois da primeira criação, os containers aparecem no grupo `balaio-local` do Docker Desktop; ali você pode iniciar ou parar os containers individualmente. Para o serviço responder, inicie também o banco correspondente. O gateway pode continuar ligado quando um serviço opcional estiver desligado.
+
+Abra `http://localhost:4321/search`. O frontend chama o gateway pela rede interna do Compose. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
 
 ## Comandos úteis
 
 ```powershell
 docker compose ps
-docker compose logs -f frontend api-gateway catalog-service
+docker compose logs -f api-gateway catalog-service
 docker compose down
 ```
 
-`docker compose down` mantém os dados do banco no volume. Para apagar o banco descartável do Compose e recriá-lo do zero:
+`docker compose down` preserva os volumes. `docker compose down -v` apaga os bancos locais do Compose; use esse comando somente se quiser perder esses dados. As portas HTTP e dos bancos no computador são configuráveis por `*_HOST_PORT` no `.env`; dentro da rede do Compose, as portas internas continuam as mesmas.
 
-```powershell
-docker compose down -v
-```
+Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do banco na tabela acima, além do usuário e da senha configurada para aquele banco. Para executar dentro do Compose, as URLs JDBC e o endereço de cada serviço são configurados automaticamente pelos nomes dos containers. O Spring Boot não lê `.env` sozinho fora do Compose.
 
-Esse último comando remove os dados persistidos pelo Compose.
+## Estado da integração
 
-## Rede e variáveis
+O catálogo já implementa a listagem de peças. Os outros quatro serviços têm a infraestrutura para iniciar, mas ainda precisam implementar entidades, migrações e endpoints. O gateway já encaminha os caminhos atuais da Fake API para seus donos; `GET /api/v1/estado` depende de definir como compor dados de três serviços. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
 
-Dentro da rede do Compose, o gateway acessa `http://catalog-service:8081`, o catálogo acessa `catalog-db:5432` e o frontend acessa `http://api-gateway:8080/api/v1`. Esses endereços usam os nomes dos serviços; dentro de um container, `localhost` aponta para o próprio container.
-
-O Compose sobrescreve a URL do banco e do catálogo para usar esses nomes internos. Para executar os serviços diretamente pela IDE, configure as variáveis do `.env` no perfil de execução. O Spring Boot não carrega automaticamente o arquivo `.env`.
-
-## Bruno
-
-A collection está em `bruno/balaio-api` e contém a listagem de peças. Use `Local` para testar pelo gateway e `Catalog local` para testar o serviço sem gateway.
-
-## Escopo
-
-Este ambiente local inicia frontend, gateway, catálogo e banco do catálogo. As demais rotas do frontend permanecem na Fake API até a integração dos respectivos serviços. Novos serviços podem ser adicionados ao Compose à medida que suas APIs e configurações locais estiverem prontas.
+A collection Bruno está em `bruno/balaio-api`.
