@@ -29,12 +29,12 @@ As portas internas e os nomes usados entre containers permanecem fixos. Para mud
 | Frontend | 4321 | — | Sim |
 | api-gateway | 8080 | — | Sim |
 | catalog-service | 8081 | catalog-db, 5433 | Sim |
-| profile-service | 8082 | profile-db, 5434 | Opcional |
+| profile-service | 8082 | profile-db, 5434 | Sim |
 | commerce-service | 8083 | commerce-db, 5435 | Opcional |
 | community-service | 8084 | community-db, 5436 | Opcional |
 | events-service | 8085 | events-db, 5437 | Opcional |
 
-Cada serviço de negócio usa seu próprio banco e volume. Os bancos dos quatro serviços opcionais são novos containers; o banco e o volume existentes do catálogo permanecem os mesmos. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum deles está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
+Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` inicia por padrão porque o fluxo de recuperação do frontend depende dele. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
 ## Primeiro uso
 
@@ -63,12 +63,20 @@ docker compose --profile extended up --build -d
 Inicie só um serviço adicional e seu banco:
 
 ```powershell
-docker compose up --build -d profile-service
+docker compose up --build -d commerce-service
 ```
 
-Troque `profile-service` por `commerce-service`, `community-service` ou `events-service` conforme o trabalho do dia. O Compose inicia o banco exigido pelo serviço escolhido. Depois da primeira criação, os containers aparecem no grupo `balaio-local` do Docker Desktop; ali você pode iniciar ou parar os containers individualmente. Para o serviço responder, inicie também o banco correspondente. O gateway pode continuar ligado quando um serviço opcional estiver desligado.
+Troque `commerce-service` por `community-service` ou `events-service` conforme o trabalho do dia. O Compose inicia o banco exigido pelo serviço escolhido. Depois da primeira criação, os containers aparecem no grupo `balaio-local` do Docker Desktop; ali você pode iniciar ou parar os containers individualmente. Para o serviço responder, inicie também o banco correspondente. O gateway pode continuar ligado quando um serviço opcional estiver desligado.
 
-Abra `http://localhost:4321/search`. O frontend chama o gateway pela rede interna do Compose. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
+Abra `http://localhost:4321/search`. No Compose padrão, o frontend usa a Fake API embutida para manter as telas existentes funcionais. O gateway e o `profile-service` também iniciam, mas o navegador não os usa nesse modo. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
+
+Para validar a recuperação de senha com o backend real, construa o frontend com o arquivo adicional:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.recovery.yml up --build -d frontend
+```
+
+Nesse modo, `API_URL=http://api-gateway:8080/api/v1` é aplicado **no build e na execução** e a Fake API é desligada. Cadastro, login, solicitação e redefinição de senha usam o `profile-service`. As demais telas ainda não estão integradas ao backend real: por exemplo, `PATCH /usuario`, endereços, alteração de senha da conta e `/artesao/me` retornam 404. O cadastro de artesão no backend não oferece vínculo de ateliê nem painel funcional; use uma conta de comprador para validar a US34. Para voltar ao frontend completo com Fake API, reconstrua a imagem com `docker compose up --build -d frontend`.
 
 ## Comandos úteis
 
@@ -84,6 +92,6 @@ Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do 
 
 ## Estado da integração
 
-O catálogo já implementa a listagem de peças. Os outros quatro serviços têm a infraestrutura para iniciar, mas ainda precisam implementar entidades, migrações e endpoints. O gateway já encaminha os caminhos atuais da Fake API para seus donos; `GET /api/v1/estado` depende de definir como compor dados de três serviços. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
+O catálogo implementa a listagem de peças, e o serviço de perfil implementa cadastro, login e recuperação de senha. A integração do frontend real está limitada a esse fluxo de autenticação; as demais telas dependem da Fake API no modo padrão. Os demais serviços ainda precisam implementar seus endpoints. O gateway já encaminha os caminhos da Fake API para seus donos; `GET /api/v1/estado` depende de definir como compor dados de três serviços. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
 
 A collection Bruno está em `bruno/balaio-api`.
