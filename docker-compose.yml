@@ -55,14 +55,19 @@ services:
     depends_on:
       catalog-service:
         condition: service_healthy
+      profile-service:
+        condition: service_healthy
 
   frontend:
     image: balaio/frontend:local
     build:
       context: ../Balaio/Frontend
       dockerfile: Dockerfile
+      args:
+        API_URL: http://127.0.0.1:3001/api/v1
     environment:
-      API_GATEWAY_URL: http://api-gateway:8080/api/v1
+      API_URL: http://127.0.0.1:3001/api/v1
+      FAKE_API_ENABLED: "true"
     ports:
       - "${FRONTEND_HOST_PORT:-4321}:7879"
     depends_on:
@@ -70,7 +75,6 @@ services:
         condition: service_healthy
 
   profile-db:
-    profiles: [extended]
     image: postgres:18-alpine
     environment:
       POSTGRES_DB: balaio_profile
@@ -88,7 +92,6 @@ services:
       start_period: 10s
 
   profile-service:
-    profiles: [extended]
     image: balaio/profile-service:local
     build:
       context: ../profile-service
@@ -98,6 +101,15 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://profile-db:5432/balaio_profile
       SPRING_DATASOURCE_USERNAME: balaio_profile_app
       SPRING_DATASOURCE_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+      PROFILE_FRONTEND_BASE_URL: ${PROFILE_FRONTEND_BASE_URL:-http://localhost:4321}
+      PROFILE_RECOVERY_TOKEN_TTL: ${PROFILE_RECOVERY_TOKEN_TTL:-PT1H}
+      PROFILE_SMTP_HOST: ${PROFILE_SMTP_HOST:-localhost}
+      PROFILE_SMTP_PORT: ${PROFILE_SMTP_PORT:-1025}
+      PROFILE_SMTP_USERNAME: ${PROFILE_SMTP_USERNAME:-}
+      PROFILE_SMTP_PASSWORD: ${PROFILE_SMTP_PASSWORD:-}
+      PROFILE_SMTP_AUTH: ${PROFILE_SMTP_AUTH:-false}
+      PROFILE_SMTP_STARTTLS: ${PROFILE_SMTP_STARTTLS:-false}
+      PROFILE_MAIL_FROM: ${PROFILE_MAIL_FROM:-nao-responda@localhost}
     ports:
       - "${PROFILE_HOST_PORT:-8082}:8082"
     depends_on:
