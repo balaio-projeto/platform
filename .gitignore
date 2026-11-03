@@ -13,6 +13,8 @@ Thumbs.db
 documentacao/
 
 # Private key material
+secrets/
+backups/
 *.pem
 *.key
 *.p12

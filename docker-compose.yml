@@ -32,6 +32,12 @@ services:
       CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/${CATALOG_DB_NAME:-balaio_catalog}
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+      PROFILE_SERVICE_URL: http://profile-service:8082
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+    volumes:
+      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
     ports:
       - "${CATALOG_HOST_PORT:-8081}:8081"
     depends_on:
@@ -96,6 +102,8 @@ services:
     build:
       context: ../profile-service
       dockerfile: Dockerfile
+    env_file:
+      - ./secrets/admin.env
     environment:
       PROFILE_SERVICE_PORT: "8082"
       SPRING_DATASOURCE_URL: jdbc:postgresql://profile-db:5432/balaio_profile
@@ -110,6 +118,12 @@ services:
       PROFILE_SMTP_AUTH: ${PROFILE_SMTP_AUTH:-false}
       PROFILE_SMTP_STARTTLS: ${PROFILE_SMTP_STARTTLS:-false}
       PROFILE_MAIL_FROM: ${PROFILE_MAIL_FROM:-nao-responda@localhost}
+      JWT_PRIVATE_KEY_LOCATION: file:/run/keys/jwt-private.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+      AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-http://localhost:4321}
+    volumes:
+      - ${JWT_PRIVATE_KEY_FILE:-./secrets/jwt-private.pem}:/run/keys/jwt-private.pem:ro
     ports:
       - "${PROFILE_HOST_PORT:-8082}:8082"
     depends_on:
