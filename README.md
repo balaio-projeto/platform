@@ -34,7 +34,7 @@ As portas internas e os nomes usados entre containers permanecem fixos. Para mud
 | community-service | 8084 | community-db, 5436 | Opcional |
 | events-service | 8085 | events-db, 5437 | Opcional |
 
-Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` inicia por padrão porque o fluxo de recuperação do frontend depende dele. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
+Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend em modo Fake API pode iniciar sozinho. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
 ## Primeiro uso
 
@@ -69,7 +69,7 @@ docker compose up --build -d commerce-service
 
 Troque `commerce-service` por `community-service` ou `events-service` conforme o trabalho do dia. O Compose inicia o banco exigido pelo serviço escolhido. Depois da primeira criação, os containers aparecem no grupo `balaio-local` do Docker Desktop; ali você pode iniciar ou parar os containers individualmente. Para o serviço responder, inicie também o banco correspondente. O gateway pode continuar ligado quando um serviço opcional estiver desligado.
 
-Abra `http://localhost:4321/search`. No Compose padrão, o frontend usa a Fake API embutida para manter as telas existentes funcionais. O gateway e o `profile-service` também iniciam, mas o navegador não os usa nesse modo. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
+Abra `http://localhost:4321/search`. No Compose padrão, o frontend usa a Fake API embutida para manter as telas existentes funcionais. Ele pode ser iniciado separadamente com `docker compose up --build -d frontend`, sem aguardar o Gateway ou o perfil. Ao iniciar a pilha completa, o gateway e o `profile-service` também sobem, mas o navegador não os usa nesse modo. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
 
 Para validar a recuperação de senha com o backend real, construa o frontend com o arquivo adicional:
 
