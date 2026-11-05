@@ -38,20 +38,16 @@ Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e
 
 ## Primeiro uso
 
-Uma instalação nova não precisa de `.env`, mas precisa preparar o par JWT antes do primeiro `up`. No PowerShell, dentro de `platform`, execute:
+Uma instalação nova precisa de um `.env` local com senhas próprias para os bancos e do par JWT antes do primeiro `up`. Copie `.env.example` para `.env`, defina `DB_PASSWORD` com uma senha forte e exclusiva para este ambiente e, se necessário, configure credenciais individuais. O Compose falha ao iniciar se não houver uma senha configurada. No PowerShell, dentro de `platform`, execute:
 
 ```powershell
+Copy-Item .env.example .env
+# Edite .env e defina DB_PASSWORD com uma senha local forte e exclusiva.
 ./scripts/prepare-local-jwt.ps1
 docker compose up --build -d
 ```
 
-O script gera localmente as duas chaves RSA de 3072 bits se não existirem, valida o par e não substitui chaves existentes. Também cria `secrets/admin.env` com uma senha aleatória para o administrador inicial, exigida pelo perfil na primeira inicialização. O diretório `secrets/` é ignorado pelo Git; guarde a senha desse arquivo para entrar como administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. O Compose usa `balaio` como senha compartilhada de desenvolvimento e as portas da tabela acima. Se quiser outra senha ou outras portas no computador, copie `.env.example` para `.env` e altere apenas os valores desejados:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-`DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
+O script gera localmente as duas chaves RSA de 3072 bits se não existirem, valida o par e não substitui chaves existentes. Também cria `secrets/admin.env` com uma senha aleatória para o administrador inicial, exigida pelo perfil na primeira inicialização. O diretório `secrets/` é ignorado pelo Git; guarde a senha desse arquivo para entrar como administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. `DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
 
 Se você já usa este ambiente, mantenha o `.env` atual: `POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD` e eventuais senhas individuais continuam aceitas e têm prioridade. Os volumes PostgreSQL já criados conservam as senhas antigas; adicionar ou mudar `DB_PASSWORD` sozinho não troca a senha gravada neles. Assim, o ambiente existente continua funcionando sem recriar bancos.
 
