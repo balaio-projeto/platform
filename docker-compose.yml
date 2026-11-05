@@ -16,7 +16,7 @@ services:
       - catalog-db-data:/var/lib/postgresql
       - ./db/init/01-create-catalog-db.sh:/docker-entrypoint-initdb.d/01-create-catalog-db.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$CATALOG_DB_PASSWORD\" psql -h 127.0.0.1 -U \"$$CATALOG_DB_USERNAME\" -d \"$$CATALOG_DB_NAME\" -qAt -c 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -32,6 +32,12 @@ services:
       CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/${CATALOG_DB_NAME:-balaio_catalog}
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:-balaio}}
+      PROFILE_SERVICE_URL: http://profile-service:8082
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+    volumes:
+      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
     ports:
       - "${CATALOG_HOST_PORT:-8081}:8081"
     depends_on:
@@ -70,9 +76,6 @@ services:
       FAKE_API_ENABLED: "true"
     ports:
       - "${FRONTEND_HOST_PORT:-4321}:7879"
-    depends_on:
-      api-gateway:
-        condition: service_healthy
 
   profile-db:
     image: postgres:18-alpine
@@ -85,7 +88,7 @@ services:
     volumes:
       - profile-db-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U balaio_profile_app -d balaio_profile"]
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -qAt -c 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -96,6 +99,8 @@ services:
     build:
       context: ../profile-service
       dockerfile: Dockerfile
+    env_file:
+      - ./secrets/admin.env
     environment:
       PROFILE_SERVICE_PORT: "8082"
       SPRING_DATASOURCE_URL: jdbc:postgresql://profile-db:5432/balaio_profile
@@ -110,6 +115,12 @@ services:
       PROFILE_SMTP_AUTH: ${PROFILE_SMTP_AUTH:-false}
       PROFILE_SMTP_STARTTLS: ${PROFILE_SMTP_STARTTLS:-false}
       PROFILE_MAIL_FROM: ${PROFILE_MAIL_FROM:-nao-responda@localhost}
+      JWT_PRIVATE_KEY_LOCATION: file:/run/keys/jwt-private.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+      AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-http://localhost:4321}
+    volumes:
+      - ${JWT_PRIVATE_KEY_FILE:-./secrets/jwt-private.pem}:/run/keys/jwt-private.pem:ro
     ports:
       - "${PROFILE_HOST_PORT:-8082}:8082"
     depends_on:
@@ -128,7 +139,7 @@ services:
     volumes:
       - commerce-db-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U balaio_commerce_app -d balaio_commerce"]
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -qAt -c 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -163,7 +174,7 @@ services:
     volumes:
       - community-db-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U balaio_community_app -d balaio_community"]
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -qAt -c 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -198,7 +209,7 @@ services:
     volumes:
       - events-db-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U balaio_events_app -d balaio_events"]
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -qAt -c 'SELECT 1' >/dev/null 2>&1"]
       interval: 5s
       timeout: 3s
       retries: 20

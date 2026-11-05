@@ -8,3 +8,6 @@ services:
     environment:
       API_URL: http://api-gateway:8080/api/v1
       FAKE_API_ENABLED: "false"
+    depends_on:
+      api-gateway:
+        condition: service_healthy

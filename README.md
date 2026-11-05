@@ -34,17 +34,18 @@ As portas internas e os nomes usados entre containers permanecem fixos. Para mud
 | community-service | 8084 | community-db, 5436 | Opcional |
 | events-service | 8085 | events-db, 5437 | Opcional |
 
-Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` inicia por padrão porque o fluxo de recuperação do frontend depende dele. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
+Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend em modo Fake API pode iniciar sozinho. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
 ## Primeiro uso
 
-Uma instalação nova não precisa de `.env`. No PowerShell, dentro de `platform`, inicie a fatia integrada atual:
+Uma instalação nova não precisa de `.env`, mas precisa preparar o par JWT antes do primeiro `up`. No PowerShell, dentro de `platform`, execute:
 
 ```powershell
+./scripts/prepare-local-jwt.ps1
 docker compose up --build -d
 ```
 
-O Compose usa `balaio` como senha compartilhada de desenvolvimento e as portas da tabela acima. Se quiser outra senha ou outras portas no computador, copie `.env.example` para `.env` e altere apenas os valores desejados:
+O script gera localmente as duas chaves RSA de 3072 bits se não existirem, valida o par e não substitui chaves existentes. Também cria `secrets/admin.env` com uma senha aleatória para o administrador inicial, exigida pelo perfil na primeira inicialização. O diretório `secrets/` é ignorado pelo Git; guarde a senha desse arquivo para entrar como administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. O Compose usa `balaio` como senha compartilhada de desenvolvimento e as portas da tabela acima. Se quiser outra senha ou outras portas no computador, copie `.env.example` para `.env` e altere apenas os valores desejados:
 
 ```powershell
 Copy-Item .env.example .env
@@ -68,7 +69,7 @@ docker compose up --build -d commerce-service
 
 Troque `commerce-service` por `community-service` ou `events-service` conforme o trabalho do dia. O Compose inicia o banco exigido pelo serviço escolhido. Depois da primeira criação, os containers aparecem no grupo `balaio-local` do Docker Desktop; ali você pode iniciar ou parar os containers individualmente. Para o serviço responder, inicie também o banco correspondente. O gateway pode continuar ligado quando um serviço opcional estiver desligado.
 
-Abra `http://localhost:4321/search`. No Compose padrão, o frontend usa a Fake API embutida para manter as telas existentes funcionais. O gateway e o `profile-service` também iniciam, mas o navegador não os usa nesse modo. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
+Abra `http://localhost:4321/search`. No Compose padrão, o frontend usa a Fake API embutida para manter as telas existentes funcionais. Ele pode ser iniciado separadamente com `docker compose up --build -d frontend`, sem aguardar o Gateway ou o perfil. Ao iniciar a pilha completa, o gateway e o `profile-service` também sobem, mas o navegador não os usa nesse modo. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
 
 Para validar a recuperação de senha com o backend real, construa o frontend com o arquivo adicional:
 
@@ -76,7 +77,42 @@ Para validar a recuperação de senha com o backend real, construa o frontend co
 docker compose -f docker-compose.yml -f docker-compose.recovery.yml up --build -d frontend
 ```
 
-Nesse modo, `API_URL=http://api-gateway:8080/api/v1` é aplicado **no build e na execução** e a Fake API é desligada. Cadastro, login, solicitação e redefinição de senha usam o `profile-service`. As demais telas ainda não estão integradas ao backend real: por exemplo, `PATCH /usuario`, endereços, alteração de senha da conta e `/artesao/me` retornam 404. O cadastro de artesão no backend não oferece vínculo de ateliê nem painel funcional; use uma conta de comprador para validar a US34. Para voltar ao frontend completo com Fake API, reconstrua a imagem com `docker compose up --build -d frontend`.
+Nesse modo, `API_URL=http://api-gateway:8080/api/v1` é aplicado **no build e na execução** e a Fake API é desligada. Cadastro, login, solicitação e redefinição de senha usam o `profile-service`; criação, listagem e edição de peças usam o `catalog-service`. `GET /artesao/me` devolve um slug provisório `artesao-<UUID>`. Outras telas ainda não estão integradas ao backend real, como `PATCH /usuario` e endereços. Para voltar ao frontend completo com Fake API, reconstrua a imagem com `docker compose up --build -d frontend`.
+
+Para iniciar perfil e catálogo com JWT, o par deve estar em `secrets/jwt-private.pem` e `secrets/jwt-public.pem` ou nos caminhos indicados por `JWT_PRIVATE_KEY_FILE` e `JWT_PUBLIC_KEY_FILE` no `.env`. Mantenha a chave privada fora do Git. Compose entrega apenas a chave pública ao catálogo; `JWT_ISSUER` e `JWT_AUDIENCE` precisam ser iguais nos dois serviços.
+
+O perfil também exige `AUTH_ALLOWED_ORIGINS`, cujo padrão no Compose é `http://localhost:4321`. Se mudar `FRONTEND_HOST_PORT`, ajuste essa origem no `.env`.
+
+### Volume de perfil legado
+
+O volume `balaio-local` criado pela migration `V1__accounts_and_password_recovery.sql` (checksum `449745879`) não valida contra a V1 atual. O procedimento de transição para esse esquema específico está em `db/migration/legacy-profile-v1-to-pi168.sql`. Ele verifica histórico e contas antes de alterar, preserva as três tabelas antigas com prefixo `legacy_`, copia as contas com os mesmos UUIDs e prefixa os hashes bcrypt. Só então reconcilia o registro V1 do Flyway; V2 e V3 são aplicadas ao iniciar o perfil. Sessões e links de recuperação antigos ficam arquivados e deixam de funcionar: entre novamente ou solicite nova recuperação.
+
+Antes da execução, pare o `profile-service`, crie e confira um backup do banco e restaure-o em um projeto Compose separado para testar o SQL. Exemplo no PowerShell, dentro de `platform`:
+
+```powershell
+docker compose stop profile-service
+New-Item -ItemType Directory -Force backups | Out-Null
+docker exec balaio-local-profile-db-1 pg_dump -U balaio_profile_app -d balaio_profile -Fc -f /tmp/profile-before-pi168.dump
+docker cp balaio-local-profile-db-1:/tmp/profile-before-pi168.dump backups/profile-before-pi168.dump
+docker exec balaio-local-profile-db-1 pg_restore -l /tmp/profile-before-pi168.dump
+$env:PROFILE_DB_HOST_PORT='45435'
+docker compose -p balaio-legacy-qa up -d --wait profile-db
+docker cp backups/profile-before-pi168.dump balaio-legacy-qa-profile-db-1:/tmp/profile-before-pi168.dump
+docker exec balaio-legacy-qa-profile-db-1 pg_restore -U balaio_profile_app -d balaio_profile --exit-on-error /tmp/profile-before-pi168.dump
+docker cp db/migration/legacy-profile-v1-to-pi168.sql balaio-legacy-qa-profile-db-1:/tmp/migrate.sql
+docker exec balaio-legacy-qa-profile-db-1 psql -U balaio_profile_app -d balaio_profile -f /tmp/migrate.sql
+```
+
+Depois de validar a cópia com o perfil atual, execute o mesmo SQL no volume original e confira os históricos V1–V3 e as contagens preservadas:
+
+```powershell
+docker cp db/migration/legacy-profile-v1-to-pi168.sql balaio-local-profile-db-1:/tmp/migrate.sql
+docker exec balaio-local-profile-db-1 psql -U balaio_profile_app -d balaio_profile -f /tmp/migrate.sql
+docker compose up -d --wait profile-service
+docker exec balaio-local-profile-db-1 psql -U balaio_profile_app -d balaio_profile -c 'SELECT version, checksum, success FROM flyway_schema_history ORDER BY installed_rank'
+```
+
+`backups/` é ignorado pelo Git. O SQL aborta se o volume já foi migrado ou se o histórico/dados diferem do esquema examinado; nesse caso, não use `repair` automaticamente.
 
 ## Comandos úteis
 
