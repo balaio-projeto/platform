@@ -11,7 +11,7 @@ services:
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
     ports:
-      - "${CATALOG_DB_HOST_PORT:-5433}:5432"
+      - "127.0.0.1:${CATALOG_DB_HOST_PORT:-5433}:5432"
     volumes:
       - catalog-db-data:/var/lib/postgresql
       - ./db/init/01-create-catalog-db.sh:/docker-entrypoint-initdb.d/01-create-catalog-db.sh:ro
@@ -84,7 +84,7 @@ services:
       POSTGRES_USER: balaio_profile_app
       POSTGRES_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
     ports:
-      - "${PROFILE_DB_HOST_PORT:-5434}:5432"
+      - "127.0.0.1:${PROFILE_DB_HOST_PORT:-5434}:5432"
     volumes:
       - profile-db-data:/var/lib/postgresql
     healthcheck:
@@ -135,7 +135,7 @@ services:
       POSTGRES_USER: balaio_commerce_app
       POSTGRES_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
     ports:
-      - "${COMMERCE_DB_HOST_PORT:-5435}:5432"
+      - "127.0.0.1:${COMMERCE_DB_HOST_PORT:-5435}:5432"
     volumes:
       - commerce-db-data:/var/lib/postgresql
     healthcheck:
@@ -170,7 +170,7 @@ services:
       POSTGRES_USER: balaio_community_app
       POSTGRES_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
     ports:
-      - "${COMMUNITY_DB_HOST_PORT:-5436}:5432"
+      - "127.0.0.1:${COMMUNITY_DB_HOST_PORT:-5436}:5432"
     volumes:
       - community-db-data:/var/lib/postgresql
     healthcheck:
@@ -205,7 +205,7 @@ services:
       POSTGRES_USER: balaio_events_app
       POSTGRES_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
     ports:
-      - "${EVENTS_DB_HOST_PORT:-5437}:5432"
+      - "127.0.0.1:${EVENTS_DB_HOST_PORT:-5437}:5432"
     volumes:
       - events-db-data:/var/lib/postgresql
     healthcheck:
