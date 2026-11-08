@@ -44,10 +44,15 @@ Uma instalação nova precisa de um `.env` local com senhas próprias para os ba
 Copy-Item .env.example .env
 # Edite .env e defina DB_PASSWORD com uma senha local forte e exclusiva.
 ./scripts/prepare-local-jwt.ps1
+./scripts/prepare-internal-token.ps1
 docker compose up --build -d
 ```
 
 O script gera localmente as duas chaves RSA de 3072 bits se não existirem, valida o par e não substitui chaves existentes. Também cria `secrets/admin.env` com uma senha aleatória para o administrador inicial, exigida pelo perfil na primeira inicialização. O diretório `secrets/` é ignorado pelo Git; guarde a senha desse arquivo para entrar como administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. `DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
+
+`prepare-internal-token.ps1` gera `BALAIO_INTERNAL_TOKEN` aleatório no `.env` local, se o valor estiver vazio, e valida um valor já configurado. O Compose entrega o mesmo token ao catálogo, commerce e community; operações `/internal/v1/**` exigem esse segredo e não passam pelo Gateway. Não compartilhe nem versione o `.env`.
+
+Com `--profile extended`, commerce e community usam esse token para reservar/confirmar/liberar peças únicas e entregar decisões de mediação. O checkout usa uma opção de frete demonstrativa e aguarda um evento de pagamento no endpoint interno do commerce. Não há cobrança, cotação externa ou reembolso financeiro. O roteiro `./scripts/test-pi190-gateway.ps1` verifica checkout, disputa por peça única, replay, consultas do artesão, recusa, evento interno, mediação e cancelamento pelo Gateway. Informe `-GatewayBase` e `-CommerceBase` do ambiente isolado: o roteiro cria contas, peças e pedidos de teste.
 
 Se você já usa este ambiente, mantenha o `.env` atual: `POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD` e eventuais senhas individuais continuam aceitas e têm prioridade. Os volumes PostgreSQL já criados conservam as senhas antigas; adicionar ou mudar `DB_PASSWORD` sozinho não troca a senha gravada neles. Assim, o ambiente existente continua funcionando sem recriar bancos.
 

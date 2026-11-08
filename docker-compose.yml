@@ -36,6 +36,7 @@ services:
       JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-}
     volumes:
       - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
     ports:
@@ -156,10 +157,19 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://commerce-db:5432/balaio_commerce
       SPRING_DATASOURCE_USERNAME: balaio_commerce_app
       SPRING_DATASOURCE_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-}
+      CATALOG_SERVICE_URL: http://catalog-service:8081
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+    volumes:
+      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
     ports:
       - "${COMMERCE_HOST_PORT:-8083}:8083"
     depends_on:
       commerce-db:
+        condition: service_healthy
+      catalog-service:
         condition: service_healthy
 
   community-db:
@@ -191,10 +201,19 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://community-db:5432/balaio_community
       SPRING_DATASOURCE_USERNAME: balaio_community_app
       SPRING_DATASOURCE_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-}
+      COMMERCE_SERVICE_URL: http://commerce-service:8083
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+    volumes:
+      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
     ports:
       - "${COMMUNITY_HOST_PORT:-8084}:8084"
     depends_on:
       community-db:
+        condition: service_healthy
+      commerce-service:
         condition: service_healthy
 
   events-db:
