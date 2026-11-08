@@ -20,7 +20,7 @@ Repo/
 
 O `Dockerfile` de cada serviço constrói sua imagem e declara a porta interna; ele não cria banco nem publica portas no computador. O `docker-compose.yml` dá nome aos containers, conecta todos na mesma rede, publica as portas e fornece ao serviço a URL JDBC, o usuário e a senha do próprio banco. A imagem PostgreSQL cria os bancos e usuários na primeira inicialização dos respectivos volumes. O catálogo usa também seu script de inicialização para criar o banco e o usuário da aplicação.
 
-As portas internas e os nomes usados entre containers permanecem fixos. Para mudar apenas a porta acessada pelo computador, use as variáveis `*_HOST_PORT` do `.env.example`.
+As portas internas e os nomes usados entre containers permanecem fixos. As portas dos bancos publicadas pelo Compose escutam somente em `127.0.0.1`; outros dispositivos da rede não conseguem acessá-las diretamente. Para mudar apenas a porta acessada pelo computador local, use as variáveis `*_HOST_PORT` do `.env.example`.
 
 ## Serviços
 
@@ -38,20 +38,21 @@ Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e
 
 ## Primeiro uso
 
-Uma instalação nova não precisa de `.env`, mas precisa preparar o par JWT antes do primeiro `up`. No PowerShell, dentro de `platform`, execute:
-
-```powershell
-./scripts/prepare-local-jwt.ps1
-docker compose up --build -d
-```
-
-O script gera localmente as duas chaves RSA de 3072 bits se não existirem, valida o par e não substitui chaves existentes. Também cria `secrets/admin.env` com uma senha aleatória para o administrador inicial, exigida pelo perfil na primeira inicialização. O diretório `secrets/` é ignorado pelo Git; guarde a senha desse arquivo para entrar como administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. O Compose usa `balaio` como senha compartilhada de desenvolvimento e as portas da tabela acima. Se quiser outra senha ou outras portas no computador, copie `.env.example` para `.env` e altere apenas os valores desejados:
+Uma instalação nova precisa de um `.env` local com senhas próprias para os bancos e do par JWT antes do primeiro `up`. Copie `.env.example` para `.env`, defina `DB_PASSWORD` com uma senha forte e exclusiva para este ambiente e, se necessário, configure credenciais individuais. O Compose falha ao iniciar se não houver uma senha configurada. No PowerShell, dentro de `platform`, execute:
 
 ```powershell
 Copy-Item .env.example .env
+# Edite .env e defina DB_PASSWORD com uma senha local forte e exclusiva.
+./scripts/prepare-local-jwt.ps1
+./scripts/prepare-internal-token.ps1
+docker compose up --build -d
 ```
 
-`DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
+O script gera localmente as duas chaves RSA de 3072 bits se não existirem, valida o par e não substitui chaves existentes. Também cria `secrets/admin.env` com uma senha aleatória para o administrador inicial, exigida pelo perfil na primeira inicialização. O diretório `secrets/` é ignorado pelo Git; guarde a senha desse arquivo para entrar como administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. `DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
+
+`prepare-internal-token.ps1` gera `BALAIO_INTERNAL_TOKEN` aleatório no `.env` local, se o valor estiver vazio, e valida um valor já configurado. O Compose entrega o mesmo token ao catálogo, commerce e community; operações `/internal/v1/**` exigem esse segredo e não passam pelo Gateway. Não compartilhe nem versione o `.env`.
+
+Com `--profile extended`, commerce e community usam esse token para reservar/confirmar/liberar peças únicas e entregar decisões de mediação. O checkout usa uma opção de frete demonstrativa e aguarda um evento de pagamento no endpoint interno do commerce. Não há cobrança, cotação externa ou reembolso financeiro. O roteiro `./scripts/test-pi190-gateway.ps1` verifica checkout, disputa por peça única, replay, consultas do artesão, recusa, evento interno, mediação e cancelamento pelo Gateway. Informe `-GatewayBase` e `-CommerceBase` do ambiente isolado: o roteiro cria contas, peças e pedidos de teste.
 
 Se você já usa este ambiente, mantenha o `.env` atual: `POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD` e eventuais senhas individuais continuam aceitas e têm prioridade. Os volumes PostgreSQL já criados conservam as senhas antigas; adicionar ou mudar `DB_PASSWORD` sozinho não troca a senha gravada neles. Assim, o ambiente existente continua funcionando sem recriar bancos.
 
@@ -122,7 +123,7 @@ docker compose logs -f api-gateway catalog-service
 docker compose down
 ```
 
-`docker compose down` preserva os volumes. `docker compose down -v` apaga os bancos locais do Compose; use esse comando somente se quiser perder esses dados. As portas HTTP e dos bancos no computador são configuráveis por `*_HOST_PORT` no `.env`; dentro da rede do Compose, as portas internas continuam as mesmas.
+`docker compose down` preserva os volumes. `docker compose down -v` apaga os bancos locais do Compose; use esse comando somente se quiser perder esses dados. As portas HTTP e dos bancos no computador são configuráveis por `*_HOST_PORT` no `.env`; as portas publicadas dos bancos permanecem restritas a `127.0.0.1`, e dentro da rede do Compose as portas internas continuam as mesmas.
 
 Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do banco na tabela acima, além do usuário e da senha configurada para aquele banco. Para executar dentro do Compose, as URLs JDBC e o endereço de cada serviço são configurados automaticamente pelos nomes dos containers. O Spring Boot não lê `.env` sozinho fora do Compose.
 
