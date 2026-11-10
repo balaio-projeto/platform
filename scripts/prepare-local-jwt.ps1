@@ -3,9 +3,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSVersion.Major -lt 7 -or ($PSVersionTable.PSVersion.Major -eq 7 -and $PSVersionTable.PSVersion.Minor -lt 2)) {
+    throw 'prepare-local-jwt.ps1 requer PowerShell 7.2 ou superior para gerar e validar chaves PEM. Execute o script em um terminal pwsh. Nenhuma chave foi alterada.'
+}
 $privatePath = Join-Path $Directory 'jwt-private.pem'
 $publicPath = Join-Path $Directory 'jwt-public.pem'
-$adminPath = Join-Path $Directory 'admin.env'
 $hasPrivate = Test-Path -LiteralPath $privatePath -PathType Leaf
 $hasPublic = Test-Path -LiteralPath $publicPath -PathType Leaf
 
@@ -46,14 +48,3 @@ try {
     $privateRsa.Dispose()
     $publicRsa.Dispose()
 }
-
-if (-not (Test-Path -LiteralPath $adminPath -PathType Leaf)) {
-    $senha = [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
-    [System.IO.File]::WriteAllText($adminPath,
-        "ADMIN_EMAIL=admin@localhost.test`nADMIN_SENHA_INICIAL=$senha`n")
-}
-$admin = [System.IO.File]::ReadAllText($adminPath)
-if ($admin -notmatch '(?m)^ADMIN_EMAIL=.+$' -or $admin -notmatch '(?m)^ADMIN_SENHA_INICIAL=.{12,}$') {
-    throw 'Configuração local do administrador inicial inválida em admin.env.'
-}
-Write-Output "Bootstrap do administrador local preparado em $adminPath"

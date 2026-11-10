@@ -3,6 +3,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSVersion.Major -lt 7 -or ($PSVersionTable.PSVersion.Major -eq 7 -and $PSVersionTable.PSVersion.Minor -lt 2)) {
+    throw 'prepare-internal-token.ps1 requer PowerShell 7.2 ou superior. Execute o script em um terminal pwsh. O .env nao foi alterado.'
+}
 if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) {
     throw "Crie $EnvFile a partir de .env.example antes de preparar o token interno."
 }

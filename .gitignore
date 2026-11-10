@@ -13,7 +13,8 @@ Thumbs.db
 documentacao/
 
 # Private key material
-secrets/
+secrets/*
+!secrets/admin.env.example
 backups/
 *.pem
 *.key

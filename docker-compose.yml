@@ -57,6 +57,12 @@ services:
       COMMERCE_SERVICE_URL: http://commerce-service:8083
       COMMUNITY_SERVICE_URL: http://community-service:8084
       EVENTS_SERVICE_URL: http://events-service:8085
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+      AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-http://localhost:4321}
+    volumes:
+      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
     ports:
       - "${GATEWAY_HOST_PORT:-8080}:8080"
     depends_on:
@@ -120,6 +126,7 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
       AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-http://localhost:4321}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
     volumes:
       - ${JWT_PRIVATE_KEY_FILE:-./secrets/jwt-private.pem}:/run/keys/jwt-private.pem:ro
     ports:

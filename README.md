@@ -38,25 +38,29 @@ Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e
 
 ## Primeiro uso
 
-Uma instalação nova precisa de um `.env` local com senhas próprias para os bancos e do par JWT antes do primeiro `up`. Copie `.env.example` para `.env`, defina `DB_PASSWORD` com uma senha forte e exclusiva para este ambiente e, se necessário, configure credenciais individuais. O Compose falha ao iniciar se não houver uma senha configurada. No PowerShell, dentro de `platform`, execute:
+Uma instalação nova precisa de um `.env` local, um par JWT e `secrets/admin.env` antes do primeiro `up`. No PowerShell 7.2 ou superior (`pwsh`), dentro de `platform`, execute:
 
 ```powershell
-Copy-Item .env.example .env
-# Edite .env e defina DB_PASSWORD com uma senha local forte e exclusiva.
-./scripts/prepare-local-jwt.ps1
-./scripts/prepare-internal-token.ps1
+pwsh -NoProfile -File .\scripts\setup-local.ps1
+# Edite .env: defina sua DB_PASSWORD antes do primeiro up.
+# Edite secrets/admin.env: defina ADMIN_EMAIL e ADMIN_SENHA_INICIAL (12+ caracteres).
+# Revise .env: SMTP, PROFILE_FRONTEND_BASE_URL, AUTH_ALLOWED_ORIGINS e portas.
 docker compose up --build -d
 ```
 
-O script gera localmente as duas chaves RSA de 3072 bits se não existirem, valida o par e não substitui chaves existentes. Também cria `secrets/admin.env` com uma senha aleatória para o administrador inicial, exigida pelo perfil na primeira inicialização. O diretório `secrets/` é ignorado pelo Git; guarde a senha desse arquivo para entrar como administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. `DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
+Esse comando inicia a pilha padrão com **6 containers**: frontend, gateway, catálogo e perfil com seus dois bancos. Para iniciar também commerce, community e events com seus bancos (**12 containers ao todo**), use o [perfil `extended`](#pilha-completa-perfil-extended).
 
-`prepare-internal-token.ps1` gera `BALAIO_INTERNAL_TOKEN` aleatório no `.env` local, se o valor estiver vazio, e valida um valor já configurado. O Compose entrega o mesmo token ao catálogo, commerce e community; operações `/internal/v1/**` exigem esse segredo e não passam pelo Gateway. Não compartilhe nem versione o `.env`.
+`setup-local.ps1` copia `.env.example` para `.env` apenas se não existir e deixa `DB_PASSWORD` vazia para você definir. Ele gera o token interno no `.env` novo, prepara JWT e cria `secrets/admin.env` apenas se faltar. Esse arquivo contém só `ADMIN_EMAIL=` e `ADMIN_SENHA_INICIAL=`; as explicações ficam em `secrets/admin.env.example`. Um `.env` existente não é alterado; se faltar o token interno, execute `./scripts/prepare-internal-token.ps1` separadamente. Preencha **você mesmo** as senhas do banco e do administrador antes do primeiro `up`. O Compose lê `secrets/admin.env` somente no `profile-service`; o script não define nem troca essas credenciais. A conta administradora é criada uma única vez em banco novo. Alterar `admin.env` depois não redefine uma conta existente. O diretório `secrets/` ignora os segredos reais no Git e mantém apenas o exemplo versionado. `prepare-local-jwt.ps1` gera e valida o par RSA de 3072 bits sem tocar no administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. `DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
 
-Com `--profile extended`, commerce e community usam esse token para reservar/confirmar/liberar peças únicas e entregar decisões de mediação. O checkout usa uma opção de frete demonstrativa e aguarda um evento de pagamento no endpoint interno do commerce. Não há cobrança, cotação externa ou reembolso financeiro. O roteiro `./scripts/test-pi190-gateway.ps1` verifica checkout, disputa por peça única, replay, consultas do artesão, recusa, evento interno, mediação e cancelamento pelo Gateway. Informe `-GatewayBase` e `-CommerceBase` do ambiente isolado: o roteiro cria contas, peças e pedidos de teste.
+`prepare-internal-token.ps1` gera `BALAIO_INTERNAL_TOKEN` aleatório no `.env` local, se o valor estiver vazio, e valida um valor já configurado. O Compose entrega o mesmo token ao catálogo, commerce e community; operações `/internal/v1/**` exigem esse segredo e não passam pelo Gateway. Os efeitos e parâmetros de cada script estão em [scripts/README.md](scripts/README.md). Não compartilhe nem versione o `.env`.
 
-Se você já usa este ambiente, mantenha o `.env` atual: `POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD` e eventuais senhas individuais continuam aceitas e têm prioridade. Os volumes PostgreSQL já criados conservam as senhas antigas; adicionar ou mudar `DB_PASSWORD` sozinho não troca a senha gravada neles. Assim, o ambiente existente continua funcionando sem recriar bancos.
+Com `--profile extended`, commerce e community usam esse token para reservar/confirmar/liberar peças únicas e entregar decisões de mediação. O checkout usa uma opção de frete demonstrativa e aguarda um evento de pagamento no endpoint interno do commerce. Não há cobrança, cotação externa ou reembolso financeiro. O roteiro manual `./scripts/test-gateway-commerce-integration.ps1` verifica checkout, disputa por peça única, replay, consultas do artesão, recusa, evento interno, mediação e cancelamento pelo Gateway. Informe `-GatewayBase` e `-CommerceBase` do ambiente isolado: o roteiro cria contas, peças e pedidos de teste.
 
-Inicie os cinco serviços de negócio, os bancos, o gateway e o frontend:
+Se você já usa este ambiente, mantenha o `.env` atual: `setup-local.ps1` não substitui esse arquivo, chaves ou `admin.env`, e um token interno não vazio também é preservado. `POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD` e eventuais senhas individuais continuam aceitas e têm prioridade. Se o `.env` não tiver `DB_PASSWORD`, preencha as senhas individuais exigidas pelos serviços que pretende iniciar ou defina `DB_PASSWORD` com um valor compatível com os bancos existentes. Os volumes PostgreSQL já criados conservam as senhas antigas; adicionar ou mudar `DB_PASSWORD` sozinho não troca a senha gravada neles. Não recrie os bancos para ajustar esta configuração.
+
+## Pilha completa (perfil extended)
+
+Para iniciar os cinco serviços de negócio, os cinco bancos, o gateway e o frontend, execute:
 
 ```powershell
 docker compose --profile extended up --build -d
@@ -70,7 +74,7 @@ docker compose up --build -d commerce-service
 
 Troque `commerce-service` por `community-service` ou `events-service` conforme o trabalho do dia. O Compose inicia o banco exigido pelo serviço escolhido. Depois da primeira criação, os containers aparecem no grupo `balaio-local` do Docker Desktop; ali você pode iniciar ou parar os containers individualmente. Para o serviço responder, inicie também o banco correspondente. O gateway pode continuar ligado quando um serviço opcional estiver desligado.
 
-Abra `http://localhost:4321/search`. No Compose padrão, o frontend usa a Fake API embutida para manter as telas existentes funcionais. Ele pode ser iniciado separadamente com `docker compose up --build -d frontend`, sem aguardar o Gateway ou o perfil. Ao iniciar a pilha completa, o gateway e o `profile-service` também sobem, mas o navegador não os usa nesse modo. No Bruno, use o ambiente `Local` e `http://localhost:8080/api/v1/pecas`.
+Abra `http://localhost:4321/search`. **Modo padrão: Fake API.** O frontend usa dados simulados embutidos para manter as telas existentes funcionais. Ele pode ser iniciado separadamente com `docker compose up --build -d frontend`, sem aguardar o Gateway ou o perfil. Ao iniciar a pilha completa, o gateway e o `profile-service` também sobem, mas o navegador não os usa nesse modo. Para chamar a API real diretamente, use o ambiente `Local` no Bruno e `http://localhost:8080/api/v1/pecas`.
 
 Para validar a recuperação de senha com o backend real, construa o frontend com o arquivo adicional:
 
@@ -78,11 +82,11 @@ Para validar a recuperação de senha com o backend real, construa o frontend co
 docker compose -f docker-compose.yml -f docker-compose.recovery.yml up --build -d frontend
 ```
 
-Nesse modo, `API_URL=http://api-gateway:8080/api/v1` é aplicado **no build e na execução** e a Fake API é desligada. Cadastro, login, solicitação e redefinição de senha usam o `profile-service`; criação, listagem e edição de peças usam o `catalog-service`. `GET /artesao/me` devolve um slug provisório `artesao-<UUID>`. Outras telas ainda não estão integradas ao backend real, como `PATCH /usuario` e endereços. Para voltar ao frontend completo com Fake API, reconstrua a imagem com `docker compose up --build -d frontend`.
+**Modo API real:** nessa configuração, `API_URL=http://api-gateway:8080/api/v1` é aplicado **no build e na execução** e a Fake API é desligada. O gateway precisa estar saudável. Cadastro, login, solicitação e redefinição de senha usam o `profile-service`; criação, listagem e edição de peças usam o `catalog-service`, conforme a implementação disponível nesses repositórios. `GET /artesao/me` devolve um slug provisório `artesao-<UUID>`. Outras telas ainda não estão integradas ao backend real, como `PATCH /usuario` e endereços. Para voltar ao frontend com Fake API, reconstrua a imagem com `docker compose up --build -d frontend`.
 
-Para iniciar perfil e catálogo com JWT, o par deve estar em `secrets/jwt-private.pem` e `secrets/jwt-public.pem` ou nos caminhos indicados por `JWT_PRIVATE_KEY_FILE` e `JWT_PUBLIC_KEY_FILE` no `.env`. Mantenha a chave privada fora do Git. Compose entrega apenas a chave pública ao catálogo; `JWT_ISSUER` e `JWT_AUDIENCE` precisam ser iguais nos dois serviços.
+Para iniciar perfil, catálogo e gateway com JWT, o par deve estar em `secrets/jwt-private.pem` e `secrets/jwt-public.pem` ou nos caminhos indicados por `JWT_PRIVATE_KEY_FILE` e `JWT_PUBLIC_KEY_FILE` no `.env`. Mantenha a chave privada fora do Git. Compose entrega a chave privada somente ao perfil e a chave pública ao catálogo, gateway e demais serviços que validam tokens. `JWT_ISSUER` e `JWT_AUDIENCE` precisam ser iguais em todos eles.
 
-O perfil também exige `AUTH_ALLOWED_ORIGINS`, cujo padrão no Compose é `http://localhost:4321`. Se mudar `FRONTEND_HOST_PORT`, ajuste essa origem no `.env`.
+O perfil e o gateway recebem `AUTH_ALLOWED_ORIGINS`, cujo padrão no Compose é `http://localhost:4321`. Se mudar `FRONTEND_HOST_PORT`, ajuste essa origem no `.env`. Para o HTTP local, o Compose passa `AUTH_COOKIE_SECURE=false` ao perfil para a configuração do cookie de sessão. Em HTTPS e produção, configure `AUTH_COOKIE_SECURE=true`, mantenha `HttpOnly` e `SameSite` apropriados e restrinja `AUTH_ALLOWED_ORIGINS` às origens confiáveis. O efeito do parâmetro de cookie depende da implementação do `profile-service` utilizada.
 
 ### Volume de perfil legado
 

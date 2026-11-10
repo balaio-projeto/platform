@@ -1,9 +1,13 @@
+# Roteiro manual de integracao do Gateway com o commerce; cria dados de teste.
 param(
     [Parameter(Mandatory = $true)][string]$GatewayBase,
     [Parameter(Mandatory = $true)][string]$CommerceBase
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSVersion.Major -lt 7 -or ($PSVersionTable.PSVersion.Major -eq 7 -and $PSVersionTable.PSVersion.Minor -lt 2)) {
+    throw 'test-gateway-commerce-integration.ps1 requer PowerShell 7.2 ou superior. Execute o script em um terminal pwsh. Nenhuma chamada de teste foi enviada.'
+}
 $root = Split-Path $PSScriptRoot -Parent
 
 function Chamar($base, $method, $path, $body, $headers = @{}) {
