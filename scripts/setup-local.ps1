@@ -67,4 +67,6 @@ if ($novoEnv -or $conteudoExistente -match '(?m)^BALAIO_INTERNAL_TOKEN=[^\r\n]+\
     Write-Warning 'BALAIO_INTERNAL_TOKEN ausente ou vazio no .env existente. Execute prepare-internal-token.ps1 separadamente para preencher esse valor.'
 }
 
+& (Join-Path $PSScriptRoot 'prepare-local-storage.ps1') -EnvFile $EnvFile -SecretsDirectory $SecretsDirectory
+
 Write-Output 'Confirme as senhas dos bancos e do administrador; revise SMTP, origem do frontend e portas antes de iniciar o Compose.'
