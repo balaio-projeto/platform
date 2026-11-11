@@ -39,7 +39,7 @@ Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e
 
 ## Primeiro uso
 
-### Storage local (PI-213, Etapa 3)
+### Storage local (PI-213)
 
 O Compose inclui SeaweedFS 4.53 com volume proprio, elevando a pilha padrao a
 **7 servicos** e o perfil `extended` a **13 servicos**. A configuracao de storage
@@ -51,6 +51,24 @@ invalidas sao recusadas. Para preparar apenas storage em instalacao existente,
 execute `./scripts/prepare-local-storage.ps1`; depois
 `docker compose up -d --no-deps seaweedfs`. Consulte [storage local](docs/storage-local.md)
 para testes autenticados, seguranca e recuperacao dos certificados.
+
+A persistencia apos reinicio/recriacao e a restauracao de backup em volume
+isolado foram verificadas na Etapa 5. O roteiro
+`./scripts/test-storage-recovery.ps1 -AllowStorageInterruption` reinicia/recria
+somente SeaweedFS, faz backup offline com ACL restrita e restaura em um projeto novo.
+Planeje a interrupcao local do storage. Para recuperar um backup existente sem
+tocar no ambiente principal, use
+`./scripts/restore-local-storage.ps1 -BackupDirectory <pasta-do-backup>`.
+**Atencao:** esses backups ainda contem credenciais e chaves privadas em texto
+claro. Git ignore e ACL nao impedem sincronizacao pelo OneDrive. Nao executar
+novos backups em pasta sincronizada antes de revisar a protecao proposta em
+[seguranca dos backups](docs/storage-local.md#seguranca-dos-backups--revisao-da-etapa-6).
+A criptografia foi especificada, mas ainda nao implementada ou testada. Restaurar
+somente snapshots locais confiaveis. Nenhum dos roteiros remove volumes.
+
+O storage esta operacional; upload/leitura de midia pelo navegador, atraves do
+gateway, ainda dependem dos tickets funcionais. PI-213/PI-264 nao estao integralmente
+concluidos. Consulte os criterios e as evidencias no guia de storage.
 
 Uma instalação nova precisa de um `.env` local, um par JWT e `secrets/admin.env` antes do primeiro `up`. No PowerShell 7.2 ou superior (`pwsh`), dentro de `platform`, execute:
 
