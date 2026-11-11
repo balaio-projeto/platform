@@ -1,0 +1,66 @@
+# SeaweedFS 4.53: protect auxiliary APIs on the shared Docker network with mTLS.
+# No private material belongs in this file. Provision the files in Etapa 3.
+[filer.expose_directory_metadata]
+enabled = false
+
+[https.client]
+enabled = true
+ca = "/run/seaweedfs/ca.crt"
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+insecure_skip_verify = false
+
+[https.master]
+ca = "/run/seaweedfs/ca.crt"
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+
+[https.volume]
+ca = "/run/seaweedfs/ca.crt"
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+
+[https.filer]
+ca = "/run/seaweedfs/ca.crt"
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+disable_tls_verify_client_cert = false
+
+[grpc]
+ca = "/run/seaweedfs/ca.crt"
+allowed_server_commonNames = "seaweedfs-internal"
+
+[grpc.client]
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+
+[grpc.master]
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+allowed_commonNames = "seaweedfs-internal"
+
+[grpc.volume]
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+allowed_commonNames = "seaweedfs-internal"
+
+[grpc.filer]
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+allowed_commonNames = "seaweedfs-internal"
+
+[grpc.s3]
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+allowed_commonNames = "seaweedfs-internal"
+
+# The bundled admin/worker also dial master and filer with their own TLS prefix.
+[grpc.admin]
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+allowed_commonNames = "seaweedfs-internal"
+
+[grpc.worker]
+cert = "/run/seaweedfs/tls.crt"
+key = "/run/seaweedfs/tls.key"
+allowed_commonNames = "seaweedfs-internal"

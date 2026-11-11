@@ -33,10 +33,24 @@ As portas internas e os nomes usados entre containers permanecem fixos. As porta
 | commerce-service | 8083 | commerce-db, 5435 | Opcional |
 | community-service | 8084 | community-db, 5436 | Opcional |
 | events-service | 8085 | events-db, 5437 | Opcional |
+| seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Sim, requer provisionamento |
 
 Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend em modo Fake API pode iniciar sozinho. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
 ## Primeiro uso
+
+### Storage local (PI-213, Etapa 3)
+
+O Compose inclui SeaweedFS 4.53 com volume proprio, elevando a pilha padrao a
+**7 servicos** e o perfil `extended` a **13 servicos**. A configuracao de storage
+falha de forma segura enquanto faltarem credenciais S3 ou certificados locais.
+`setup-local.ps1` prepara automaticamente credenciais aleatorias e certificados
+com PowerShell 7.2+, sem OpenSSL. Preserva `.env`, JWT e senhas existentes,
+acrescentando somente configuracoes S3 ausentes. Configuracoes parciais ou
+invalidas sao recusadas. Para preparar apenas storage em instalacao existente,
+execute `./scripts/prepare-local-storage.ps1`; depois
+`docker compose up -d --no-deps seaweedfs`. Consulte [storage local](docs/storage-local.md)
+para testes autenticados, seguranca e recuperacao dos certificados.
 
 Uma instalação nova precisa de um `.env` local, um par JWT e `secrets/admin.env` antes do primeiro `up`. No PowerShell 7.2 ou superior (`pwsh`), dentro de `platform`, execute:
 
@@ -48,7 +62,7 @@ pwsh -NoProfile -File .\scripts\setup-local.ps1
 docker compose up --build -d
 ```
 
-Esse comando inicia a pilha padrão com **6 containers**: frontend, gateway, catálogo e perfil com seus dois bancos. Para iniciar também commerce, community e events com seus bancos (**12 containers ao todo**), use o [perfil `extended`](#pilha-completa-perfil-extended).
+Com o storage provisionado, esse comando inicia a pilha padrão com **7 containers**: frontend, gateway, catálogo e perfil com seus dois bancos, e SeaweedFS. Para iniciar também commerce, community e events com seus bancos (**13 containers ao todo**), use o [perfil `extended`](#pilha-completa-perfil-extended).
 
 `setup-local.ps1` copia `.env.example` para `.env` apenas se não existir e deixa `DB_PASSWORD` vazia para você definir. Ele gera o token interno no `.env` novo, prepara JWT e cria `secrets/admin.env` apenas se faltar. Esse arquivo contém só `ADMIN_EMAIL=` e `ADMIN_SENHA_INICIAL=`; as explicações ficam em `secrets/admin.env.example`. Um `.env` existente não é alterado; se faltar o token interno, execute `./scripts/prepare-internal-token.ps1` separadamente. Preencha **você mesmo** as senhas do banco e do administrador antes do primeiro `up`. O Compose lê `secrets/admin.env` somente no `profile-service`; o script não define nem troca essas credenciais. A conta administradora é criada uma única vez em banco novo. Alterar `admin.env` depois não redefine uma conta existente. O diretório `secrets/` ignora os segredos reais no Git e mantém apenas o exemplo versionado. `prepare-local-jwt.ps1` gera e valida o par RSA de 3072 bits sem tocar no administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. `DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
 
@@ -60,7 +74,7 @@ Se você já usa este ambiente, mantenha o `.env` atual: `setup-local.ps1` não 
 
 ## Pilha completa (perfil extended)
 
-Para iniciar os cinco serviços de negócio, os cinco bancos, o gateway e o frontend, execute:
+Com o storage provisionado, para iniciar os cinco serviços de negócio, os cinco bancos, o gateway, o frontend e o SeaweedFS, execute:
 
 ```powershell
 docker compose --profile extended up --build -d
