@@ -6,7 +6,7 @@ Ambiente de desenvolvimento local do Balaio. Cada aplicação tem seu repositór
 
 ```text
 Repo/
-├── Balaio/Frontend/
+├── Balaio-Front/Frontend/  # https://github.com/balaio-projeto/Balaio-Front
 ├── api-gateway/
 ├── catalog-service/
 ├── profile-service/
@@ -33,96 +33,31 @@ As portas internas e os nomes usados entre containers permanecem fixos. As porta
 | commerce-service | 8083 | commerce-db, 5435 | Opcional |
 | community-service | 8084 | community-db, 5436 | Opcional |
 | events-service | 8085 | events-db, 5437 | Opcional |
-| seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Sim, requer provisionamento |
+| seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Perfil `storage` |
 
-Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend em modo Fake API pode iniciar sozinho. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
+Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend encaminha autenticação, catálogo e pedidos ao Gateway e conserva a Fake API para telas sem integração real. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
 ## Primeiro uso
 
-### Storage local (PI-213)
-
-O Compose inclui SeaweedFS 4.53 com volume proprio, elevando a pilha padrao a
-**7 servicos** e o perfil `extended` a **13 servicos**. A configuracao de storage
-falha de forma segura enquanto faltarem credenciais S3 ou certificados locais.
-`setup-local.ps1` prepara automaticamente credenciais aleatorias e certificados
-com PowerShell 7.2+, sem OpenSSL. Preserva `.env`, JWT e senhas existentes,
-acrescentando somente configuracoes S3 ausentes. Configuracoes parciais ou
-invalidas sao recusadas. Para preparar apenas storage em instalacao existente,
-execute `./scripts/prepare-local-storage.ps1`; depois
-`docker compose up -d --no-deps seaweedfs`. Consulte [storage local](docs/storage-local.md)
-para testes autenticados, seguranca e recuperacao dos certificados.
-
-A persistencia apos reinicio/recriacao e a restauracao de backup em volume
-isolado foram verificadas na Etapa 5. O roteiro
-`./scripts/test-storage-recovery.ps1 -AllowStorageInterruption` reinicia/recria
-somente SeaweedFS, faz backup offline com ACL restrita e restaura em um projeto novo.
-Planeje a interrupcao local do storage. Para recuperar um backup existente sem
-tocar no ambiente principal, use
-`./scripts/restore-local-storage.ps1 -BackupDirectory <pasta-do-backup>`.
-**Atencao:** esses backups ainda contem credenciais e chaves privadas em texto
-claro. Git ignore e ACL nao impedem sincronizacao pelo OneDrive. Nao executar
-novos backups em pasta sincronizada antes de revisar a protecao proposta em
-[seguranca dos backups](docs/storage-local.md#seguranca-dos-backups--revisao-da-etapa-6).
-A criptografia foi especificada, mas ainda nao implementada ou testada. Restaurar
-somente snapshots locais confiaveis. Nenhum dos roteiros remove volumes.
-
-O storage esta operacional; upload/leitura de midia pelo navegador, atraves do
-gateway, ainda dependem dos tickets funcionais. PI-213/PI-264 nao estao integralmente
-concluidos. Consulte os criterios e as evidencias no guia de storage.
-
-Uma instalação nova precisa de um `.env` local, um par JWT e `secrets/admin.env` antes do primeiro `up`. No PowerShell 7.2 ou superior (`pwsh`), dentro de `platform`, execute:
+Na pasta `platform`, inicie a pilha completa com um comando:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\setup-local.ps1
-# Edite .env: defina sua DB_PASSWORD antes do primeiro up.
-# Edite secrets/admin.env: defina ADMIN_EMAIL e ADMIN_SENHA_INICIAL (12+ caracteres).
-# Revise .env: SMTP, PROFILE_FRONTEND_BASE_URL, AUTH_ALLOWED_ORIGINS e portas.
-docker compose up --build -d
+docker compose --profile extended up --build
 ```
 
-Com o storage provisionado, esse comando inicia a pilha padrão com **7 containers**: frontend, gateway, catálogo e perfil com seus dois bancos, e SeaweedFS. Para iniciar também commerce, community e events com seus bancos (**13 containers ao todo**), use o [perfil `extended`](#pilha-completa-perfil-extended).
+O Compose usa senhas locais demonstrativas para os bancos e um token interno local, gera o par JWT RSA no volume do perfil e não exige `.env`, `admin.env`, chaves `.pem` nem scripts preparatórios. Não use esses defaults fora do computador de desenvolvimento. O administrador inicial não é criado sem `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL`; contas comuns podem ser cadastradas normalmente. O volume da chave privada é montado apenas no perfil; gateway e demais serviços recebem somente a chave pública gerada.
 
-`setup-local.ps1` copia `.env.example` para `.env` apenas se não existir e deixa `DB_PASSWORD` vazia para você definir. Ele gera o token interno no `.env` novo, prepara JWT e cria `secrets/admin.env` apenas se faltar. Esse arquivo contém só `ADMIN_EMAIL=` e `ADMIN_SENHA_INICIAL=`; as explicações ficam em `secrets/admin.env.example`. Um `.env` existente não é alterado; se faltar o token interno, execute `./scripts/prepare-internal-token.ps1` separadamente. Preencha **você mesmo** as senhas do banco e do administrador antes do primeiro `up`. O Compose lê `secrets/admin.env` somente no `profile-service`; o script não define nem troca essas credenciais. A conta administradora é criada uma única vez em banco novo. Alterar `admin.env` depois não redefine uma conta existente. O diretório `secrets/` ignora os segredos reais no Git e mantém apenas o exemplo versionado. `prepare-local-jwt.ps1` gera e valida o par RSA de 3072 bits sem tocar no administrador. Se usar caminhos próprios para as chaves no `.env`, forneça ambos os arquivos antes do `up`. `DB_PASSWORD` vale para os cinco bancos, inclusive para o administrador do PostgreSQL do catálogo. Cada serviço continua com banco, usuário e volume próprios. Não versione `.env`.
+O SeaweedFS (PI-213) permanece disponível no perfil `storage`, com seu provisionamento descrito em [storage local](docs/storage-local.md); ele não participa do primeiro start nem do checkout PI-54.
 
-<<<<<<< HEAD
-`prepare-internal-token.ps1` gera `BALAIO_INTERNAL_TOKEN` aleatório no `.env` local, se o valor estiver vazio, e valida um valor já configurado. O Compose entrega o mesmo token ao catálogo, commerce e community; operações `/internal/v1/**` exigem esse segredo e não passam pelo Gateway. Os efeitos e parâmetros de cada script estão em [scripts/README.md](scripts/README.md). Não compartilhe nem versione o `.env`.
-=======
-Com `--profile extended`, commerce e community usam esse token para reservar/confirmar/liberar peças únicas e entregar decisões de mediação. Para iniciar o commerce com PI-54, configure no `.env` local `MERCADOPAGO_ENVIRONMENT=sandbox`, token e segredo webhook de uma aplicação de teste, além das URLs públicas HTTPS de webhook e retorno. O serviço recusa inicialização sem essa configuração. O token e o segredo não são entregues ao frontend. O roteiro legado `./scripts/test-pi190-gateway.ps1` usa o simulador de pagamento removido no PI-54 e não valida mais o checkout atual; use o roteiro sandbox de `commerce-service/docs/PI-54-checkout-pro-sandbox.md`.
->>>>>>> 854980d (chore(PI-54): configurar sandbox do Mercado Pago)
-
-Com `--profile extended`, commerce e community usam esse token para reservar/confirmar/liberar peças únicas e entregar decisões de mediação. O checkout usa uma opção de frete demonstrativa e aguarda um evento de pagamento no endpoint interno do commerce. Não há cobrança, cotação externa ou reembolso financeiro. O roteiro manual `./scripts/test-gateway-commerce-integration.ps1` verifica checkout, disputa por peça única, replay, consultas do artesão, recusa, evento interno, mediação e cancelamento pelo Gateway. Informe `-GatewayBase` e `-CommerceBase` do ambiente isolado: o roteiro cria contas, peças e pedidos de teste.
-
-Se você já usa este ambiente, mantenha o `.env` atual: `setup-local.ps1` não substitui esse arquivo, chaves ou `admin.env`, e um token interno não vazio também é preservado. `POSTGRES_ADMIN_PASSWORD`, `CATALOG_DB_PASSWORD` e eventuais senhas individuais continuam aceitas e têm prioridade. Se o `.env` não tiver `DB_PASSWORD`, preencha as senhas individuais exigidas pelos serviços que pretende iniciar ou defina `DB_PASSWORD` com um valor compatível com os bancos existentes. Os volumes PostgreSQL já criados conservam as senhas antigas; adicionar ou mudar `DB_PASSWORD` sozinho não troca a senha gravada neles. Não recrie os bancos para ajustar esta configuração.
+Para pagar de fato no sandbox, forneça opcionalmente `MERCADOPAGO_ENVIRONMENT=sandbox`, `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `MERCADOPAGO_NOTIFICATION_URL` (HTTPS público) e `FRONTEND_RETURN_URL` (HTTPS público). Sem o conjunto completo, o commerce inicia, mas `POST /api/v1/checkout` retorna 503. Configuração parcial ou de produção é recusada. Use conta de teste vendedora e compradora distintas; veja [roteiro PI-54](../commerce-service/docs/PI-54-checkout-pro-sandbox.md). Não versione valores dessas variáveis.
 
 ## Pilha completa (perfil extended)
 
-Com o storage provisionado, para iniciar os cinco serviços de negócio, os cinco bancos, o gateway, o frontend e o SeaweedFS, execute:
+`docker compose --profile extended up --build` inicia frontend, gateway, perfil, catálogo, commerce, community, events e seus bancos, sem SeaweedFS. O frontend encaminha o checkout e o estado de pedidos ao Gateway. As demais telas continuam conforme sua integração atual.
 
-```powershell
-docker compose --profile extended up --build -d
-```
+O perfil `storage` e o roteiro de provisionamento do SeaweedFS são independentes do primeiro start.
 
-Inicie só um serviço adicional e seu banco:
-
-```powershell
-docker compose up --build -d commerce-service
-```
-
-Troque `commerce-service` por `community-service` ou `events-service` conforme o trabalho do dia. O Compose inicia o banco exigido pelo serviço escolhido. Depois da primeira criação, os containers aparecem no grupo `balaio-local` do Docker Desktop; ali você pode iniciar ou parar os containers individualmente. Para o serviço responder, inicie também o banco correspondente. O gateway pode continuar ligado quando um serviço opcional estiver desligado.
-
-Abra `http://localhost:4321/search`. **Modo padrão: Fake API.** O frontend usa dados simulados embutidos para manter as telas existentes funcionais. Ele pode ser iniciado separadamente com `docker compose up --build -d frontend`, sem aguardar o Gateway ou o perfil. Ao iniciar a pilha completa, o gateway e o `profile-service` também sobem, mas o navegador não os usa nesse modo. Para chamar a API real diretamente, use o ambiente `Local` no Bruno e `http://localhost:8080/api/v1/pecas`.
-
-Para validar a recuperação de senha com o backend real, construa o frontend com o arquivo adicional:
-
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.recovery.yml up --build -d frontend
-```
-
-**Modo API real:** nessa configuração, `API_URL=http://api-gateway:8080/api/v1` é aplicado **no build e na execução** e a Fake API é desligada. O gateway precisa estar saudável. Cadastro, login, solicitação e redefinição de senha usam o `profile-service`; criação, listagem e edição de peças usam o `catalog-service`, conforme a implementação disponível nesses repositórios. `GET /artesao/me` devolve um slug provisório `artesao-<UUID>`. Outras telas ainda não estão integradas ao backend real, como `PATCH /usuario` e endereços. Para voltar ao frontend com Fake API, reconstrua a imagem com `docker compose up --build -d frontend`.
-
-Para iniciar perfil, catálogo e gateway com JWT, o par deve estar em `secrets/jwt-private.pem` e `secrets/jwt-public.pem` ou nos caminhos indicados por `JWT_PRIVATE_KEY_FILE` e `JWT_PUBLIC_KEY_FILE` no `.env`. Mantenha a chave privada fora do Git. Compose entrega a chave privada somente ao perfil e a chave pública ao catálogo, gateway e demais serviços que validam tokens. `JWT_ISSUER` e `JWT_AUDIENCE` precisam ser iguais em todos eles.
-
-O perfil e o gateway recebem `AUTH_ALLOWED_ORIGINS`, cujo padrão no Compose é `http://localhost:4321`. Se mudar `FRONTEND_HOST_PORT`, ajuste essa origem no `.env`. Para o HTTP local, o Compose passa `AUTH_COOKIE_SECURE=false` ao perfil para a configuração do cookie de sessão. Em HTTPS e produção, configure `AUTH_COOKIE_SECURE=true`, mantenha `HttpOnly` e `SameSite` apropriados e restrinja `AUTH_ALLOWED_ORIGINS` às origens confiáveis. O efeito do parâmetro de cookie depende da implementação do `profile-service` utilizada.
+O perfil e o gateway recebem `AUTH_ALLOWED_ORIGINS`, com padrão `http://localhost:4321`. Se mudar `FRONTEND_HOST_PORT`, ajuste essa origem. Para HTTP local, `AUTH_COOKIE_SECURE=false`; em HTTPS, configure `true`. A chave privada JWT local fica no volume `jwt-local-private` acessível apenas ao perfil; a chave pública é publicada no volume `jwt-local-public` para os serviços validadores. O par persiste entre reinícios do Compose.
 
 ### Volume de perfil legado
 
