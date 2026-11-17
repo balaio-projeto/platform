@@ -279,6 +279,7 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
     volumes:
       - jwt-local-public:/run/keys-public:ro
+      - community-midia:/app/dados
     ports:
       - "${COMMUNITY_HOST_PORT:-8084}:8084"
     depends_on:
@@ -330,4 +331,5 @@ volumes:
   profile-db-data:
   commerce-db-data:
   community-db-data:
+  community-midia:
   events-db-data:
