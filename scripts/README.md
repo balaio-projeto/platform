@@ -1,5 +1,46 @@
 # Scripts locais
 
+## Storage local (PI-213)
+
+`setup-local.ps1` tambem executa `prepare-local-storage.ps1`, antes do primeiro
+`docker compose up`. Em ambiente existente, use `./scripts/prepare-local-storage.ps1`
+para preparar somente storage. O script aceita `-EnvFile` e `-SecretsDirectory`,
+exige caminhos ignorados e nao rastreados pelo Git, e preserva valores validos.
+Ele acrescenta somente variaveis S3 ausentes ao `.env`, gera credenciais aleatorias,
+certificados RSA 3072 em `secrets/seaweedfs/` e a chave CA em
+`secrets/seaweedfs-ca/`. Configuracoes parciais, invalidas ou certificados perto
+do vencimento sao recusados sem substituicao automatica.
+
+Usa apenas PowerShell 7.2+/.NET e Git; nao requer OpenSSL no Windows. Os caminhos
+alternativos de certificados exigem alinhamento dos mounts do Compose.
+
+Depois de iniciar somente `seaweedfs`, execute
+`./scripts/test-local-storage.ps1` para testar host, Docker, bucket privado e
+interfaces internas. O roteiro cria e remove apenas um objeto diagnostico unico
+em `balaio-media/diagnostics/`. Com `-IncludeSpecialCharacterTest`, cria tambem
+uma fixture isolada sem rede, portas publicadas ou volumes de dados, removida
+ao final, para testar credenciais com caracteres especiais. Nao imprime segredos.
+O setup nunca inicia containers. Veja [storage local](../docs/storage-local.md).
+
+Etapa 5: `./scripts/test-storage-recovery.ps1 -AllowStorageInterruption` testa
+persistencia apos reinicio e recriacao, faz backup com parada limpa somente do
+storage e restaura em volume/projeto novos. Exige os 13 containers saudaveis.
+Guarda snapshot com ACL restrita e manifesto em `backups/seaweedfs-<data>-<id>/`.
+`./scripts/restore-local-storage.ps1 -BackupDirectory <snapshot>` recupera somente
+do snapshot, sem ler o `.env` principal, sempre em outro volume/projeto novo.
+Ambos deixam restauracoes paradas, preservando containers, redes e volumes para
+revisao. Nunca sobrescrevem um volume ou backup existente; nao sao scripts de
+limpeza. Consulte procedimentos e resultados em [storage local](../docs/storage-local.md).
+
+**Limite de seguranca atual:** snapshots contem credenciais S3 e chaves privadas
+sem criptografia. A pasta `backups/` deste workspace esta dentro do OneDrive;
+nao executar novos ensaios de backup ali antes de aprovar o endurecimento descrito
+no [plano de protecao](../docs/storage-local.md#seguranca-dos-backups--revisao-da-etapa-6).
+O restaurador executa scripts e um template Compose vindos do snapshot: aceitar
+somente copias locais confiaveis, nunca arquivos recebidos de terceiros. Hashes
+detectam corrupcao, mas nao comprovam a origem. A criptografia proposta ainda
+nao faz parte destes comandos. Backups existentes nao foram movidos ou alterados.
+
 Execute os comandos abaixo no PowerShell 7.2 ou superior (`pwsh`), a partir de `platform`. Confirme a versão com `pwsh --version`; `powershell.exe` abre o Windows PowerShell 5.1 e não oferece as APIs PEM usadas aqui. Os arquivos `.env`, `secrets/admin.env` e as chaves em `secrets/` ficam fora do Git; `secrets/admin.env.example` é o único exemplo versionado nessa pasta. O teste de integração também exige a API em execução.
 
 | Script | Comando | Efeito |
