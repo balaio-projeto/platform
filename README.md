@@ -35,7 +35,7 @@ As portas internas e os nomes usados entre containers permanecem fixos. As porta
 | events-service | 8085 | events-db, 5437 | Opcional |
 | seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Perfil `storage` |
 
-Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend encaminha autenticação, catálogo e pedidos ao Gateway e conserva a Fake API para telas sem integração real. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
+Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend encaminha todas as chamadas da API ao Gateway; não há mais Fake API. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
 ## Primeiro uso
 
@@ -104,6 +104,6 @@ Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do 
 
 ## Estado da integração
 
-O catálogo implementa a listagem de peças, e o serviço de perfil implementa cadastro, login e recuperação de senha. A integração do frontend real está limitada a esse fluxo de autenticação; as demais telas dependem da Fake API no modo padrão. Os demais serviços ainda precisam implementar seus endpoints. O gateway já encaminha os caminhos da Fake API para seus donos; `GET /api/v1/estado` depende de definir como compor dados de três serviços. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
+O frontend fala apenas com o Gateway. Catálogo, perfil (autenticação, recuperação de senha e perfil público do artesão), commerce (sacola, checkout e pedidos) e community (perguntas, vídeos, conversas, avaliações, coleções e mediação) atendem suas telas. Ainda não têm endpoint: no perfil, edição dos dados da conta e endereços, configurações do ateliê, selo, coletivos e curadoria; no events, listagem, detalhe e criação de eventos. Essas telas exibem erro até os serviços implementarem as rotas que o Gateway já encaminha. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
 
 A collection Bruno está em `bruno/balaio-api`.
