@@ -2,6 +2,7 @@ name: balaio-local
 
 services:
   seaweedfs:
+    profiles: [storage]
     # SeaweedFS 4.53 / Apache-2.0. See docs/storage-local.md.
     image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
     restart: unless-stopped
@@ -26,8 +27,8 @@ services:
       - -filer.disableDirListing=true
       - -filer.exposeDirectoryData=false
     environment:
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Defina S3_ACCESS_KEY_ID localmente; veja docs/storage-local.md}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Defina S3_SECRET_ACCESS_KEY localmente; veja docs/storage-local.md}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_BUCKET: balaio-media
     ports:
       - "127.0.0.1:${S3_HOST_PORT:-8333}:8333"
@@ -58,10 +59,10 @@ services:
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
       CATALOG_DB_NAME: ${CATALOG_DB_NAME:-balaio_catalog}
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
-      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
     ports:
       - "127.0.0.1:${CATALOG_DB_HOST_PORT:-5433}:5432"
     volumes:
@@ -83,18 +84,20 @@ services:
       CATALOG_SERVICE_PORT: "8081"
       CATALOG_DB_URL: jdbc:postgresql://catalog-db:5432/${CATALOG_DB_NAME:-balaio_catalog}
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-balaio_catalog_app}
-      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
       PROFILE_SERVICE_URL: http://profile-service:8082
-      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys-public/jwt-public.pem
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
-      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-}
+      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-balaio-local-internal-token-1234567890}
     volumes:
-      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
+      - jwt-local-public:/run/keys-public:ro
     ports:
       - "${CATALOG_HOST_PORT:-8081}:8081"
     depends_on:
       catalog-db:
+        condition: service_healthy
+      profile-service:
         condition: service_healthy
 
   api-gateway:
@@ -109,12 +112,12 @@ services:
       COMMERCE_SERVICE_URL: http://commerce-service:8083
       COMMUNITY_SERVICE_URL: http://community-service:8084
       EVENTS_SERVICE_URL: http://events-service:8085
-      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys-public/jwt-public.pem
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
       AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-http://localhost:4321}
     volumes:
-      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
+      - jwt-local-public:/run/keys-public:ro
     ports:
       - "${GATEWAY_HOST_PORT:-8080}:8080"
     depends_on:
@@ -126,12 +129,13 @@ services:
   frontend:
     image: balaio/frontend:local
     build:
-      context: ../Balaio/Frontend
+      context: ../Balaio-Front/Frontend
       dockerfile: Dockerfile
       args:
         API_URL: http://127.0.0.1:3001/api/v1
     environment:
       API_URL: http://127.0.0.1:3001/api/v1
+      API_GATEWAY_URL: http://api-gateway:8080/api/v1
       FAKE_API_ENABLED: "true"
     ports:
       - "${FRONTEND_HOST_PORT:-4321}:7879"
@@ -141,7 +145,7 @@ services:
     environment:
       POSTGRES_DB: balaio_profile
       POSTGRES_USER: balaio_profile_app
-      POSTGRES_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      POSTGRES_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
     ports:
       - "127.0.0.1:${PROFILE_DB_HOST_PORT:-5434}:5432"
     volumes:
@@ -158,14 +162,14 @@ services:
     build:
       context: ../profile-service
       dockerfile: Dockerfile
-    env_file:
-      - ./secrets/admin.env
     environment:
       SPRING_PROFILES_ACTIVE: local
       PROFILE_SERVICE_PORT: "8082"
       SPRING_DATASOURCE_URL: jdbc:postgresql://profile-db:5432/balaio_profile
       SPRING_DATASOURCE_USERNAME: balaio_profile_app
-      SPRING_DATASOURCE_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      SPRING_DATASOURCE_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_SENHA_INICIAL: ${ADMIN_SENHA_INICIAL:-}
       PROFILE_FRONTEND_BASE_URL: ${PROFILE_FRONTEND_BASE_URL:-http://localhost:4321}
       PROFILE_RECOVERY_TOKEN_TTL: ${PROFILE_RECOVERY_TOKEN_TTL:-PT1H}
       PROFILE_SMTP_HOST: ${PROFILE_SMTP_HOST:-localhost}
@@ -175,13 +179,14 @@ services:
       PROFILE_SMTP_AUTH: ${PROFILE_SMTP_AUTH:-false}
       PROFILE_SMTP_STARTTLS: ${PROFILE_SMTP_STARTTLS:-false}
       PROFILE_MAIL_FROM: ${PROFILE_MAIL_FROM:-nao-responda@localhost}
-      JWT_PRIVATE_KEY_LOCATION: file:/run/keys/jwt-private.pem
+      JWT_PRIVATE_KEY_LOCATION: local-generated
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
       AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-http://localhost:4321}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
     volumes:
-      - ${JWT_PRIVATE_KEY_FILE:-./secrets/jwt-private.pem}:/run/keys/jwt-private.pem:ro
+      - jwt-local-private:/run/keys-private
+      - jwt-local-public:/run/keys-public
     ports:
       - "${PROFILE_HOST_PORT:-8082}:8082"
     depends_on:
@@ -194,7 +199,7 @@ services:
     environment:
       POSTGRES_DB: balaio_commerce
       POSTGRES_USER: balaio_commerce_app
-      POSTGRES_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      POSTGRES_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
     ports:
       - "127.0.0.1:${COMMERCE_DB_HOST_PORT:-5435}:5432"
     volumes:
@@ -216,14 +221,20 @@ services:
       COMMERCE_SERVICE_PORT: "8083"
       SPRING_DATASOURCE_URL: jdbc:postgresql://commerce-db:5432/balaio_commerce
       SPRING_DATASOURCE_USERNAME: balaio_commerce_app
-      SPRING_DATASOURCE_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
-      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-}
+      SPRING_DATASOURCE_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
+      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-balaio-local-internal-token-1234567890}
       CATALOG_SERVICE_URL: http://catalog-service:8081
-      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      MERCADOPAGO_ENVIRONMENT: ${MERCADOPAGO_ENVIRONMENT:-}
+      MERCADOPAGO_BASE_URL: https://api.mercadopago.com
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+      MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+      MERCADOPAGO_NOTIFICATION_URL: ${MERCADOPAGO_NOTIFICATION_URL:-}
+      FRONTEND_RETURN_URL: ${FRONTEND_RETURN_URL:-}
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys-public/jwt-public.pem
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
     volumes:
-      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
+      - jwt-local-public:/run/keys-public:ro
     ports:
       - "${COMMERCE_HOST_PORT:-8083}:8083"
     depends_on:
@@ -238,7 +249,7 @@ services:
     environment:
       POSTGRES_DB: balaio_community
       POSTGRES_USER: balaio_community_app
-      POSTGRES_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      POSTGRES_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
     ports:
       - "127.0.0.1:${COMMUNITY_DB_HOST_PORT:-5436}:5432"
     volumes:
@@ -260,14 +271,14 @@ services:
       COMMUNITY_SERVICE_PORT: "8084"
       SPRING_DATASOURCE_URL: jdbc:postgresql://community-db:5432/balaio_community
       SPRING_DATASOURCE_USERNAME: balaio_community_app
-      SPRING_DATASOURCE_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
-      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-}
+      SPRING_DATASOURCE_PASSWORD: ${COMMUNITY_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
+      BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-balaio-local-internal-token-1234567890}
       COMMERCE_SERVICE_URL: http://commerce-service:8083
-      JWT_PUBLIC_KEY_LOCATION: file:/run/keys/jwt-public.pem
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys-public/jwt-public.pem
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
     volumes:
-      - ${JWT_PUBLIC_KEY_FILE:-./secrets/jwt-public.pem}:/run/keys/jwt-public.pem:ro
+      - jwt-local-public:/run/keys-public:ro
     ports:
       - "${COMMUNITY_HOST_PORT:-8084}:8084"
     depends_on:
@@ -282,7 +293,7 @@ services:
     environment:
       POSTGRES_DB: balaio_events
       POSTGRES_USER: balaio_events_app
-      POSTGRES_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      POSTGRES_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
     ports:
       - "127.0.0.1:${EVENTS_DB_HOST_PORT:-5437}:5432"
     volumes:
@@ -304,7 +315,7 @@ services:
       EVENTS_SERVICE_PORT: "8085"
       SPRING_DATASOURCE_URL: jdbc:postgresql://events-db:5432/balaio_events
       SPRING_DATASOURCE_USERNAME: balaio_events_app
-      SPRING_DATASOURCE_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:?Defina DB_PASSWORD em platform/.env}}
+      SPRING_DATASOURCE_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
     ports:
       - "${EVENTS_HOST_PORT:-8085}:8085"
     depends_on:
@@ -312,6 +323,8 @@ services:
         condition: service_healthy
 
 volumes:
+  jwt-local-private:
+  jwt-local-public:
   seaweedfs-data:
   catalog-db-data:
   profile-db-data:
