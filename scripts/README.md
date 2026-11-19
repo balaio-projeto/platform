@@ -2,6 +2,12 @@
 
 ## Storage local (PI-213)
 
+O PI-214 acrescenta uma identidade S3 do Profile Service ao mesmo preparador.
+`test-storage-provisioning.ps1` verifica geracao e idempotencia em fixture isolada.
+`test-profile-storage.ps1` verifica o acesso por prefixo na rede Docker, as variaveis
+do container e os logs. Procedimento e excecao aceita de ListBuckets vazio estao
+no [guia S3 do Profile Service](../docs/pi-214-s3.md).
+
 `setup-local.ps1` tambem executa `prepare-local-storage.ps1`, antes do primeiro
 `docker compose up`. Em ambiente existente, use `./scripts/prepare-local-storage.ps1`
 para preparar somente storage. O script aceita `-EnvFile` e `-SecretsDirectory`,
@@ -63,3 +69,17 @@ if (-not (Test-Path secrets/admin.env)) { Set-Content secrets/admin.env -Value '
 ```
 
 `setup-local.ps1` aceita `-EnvFile` e `-SecretsDirectory` para preparar caminhos locais alternativos. `prepare-local-jwt.ps1` aceita `-Directory` e `prepare-internal-token.ps1` aceita `-EnvFile`. Mantenha `JWT_PRIVATE_KEY_FILE` e `JWT_PUBLIC_KEY_FILE` do `.env` alinhados com os caminhos preparados antes de iniciar o Compose. Se já houver volumes PostgreSQL, mantenha as credenciais que correspondem a esses bancos; criar uma nova `DB_PASSWORD` não altera senhas gravadas nos volumes.
+
+### Integracao PI-214 com a develop
+
+O storage e opcional: a pilha padrao continua iniciando sem provisionamento.
+Executar prepare-local-storage.ps1 e uma acao explicita para gerar/preservar
+as credenciais consumidoras e habilitar MEDIA_S3_ENDPOINT. Inicie o perfil
+storage junto de extended ao utilizar midia.
+
+`test-storage-provisioning.ps1` utiliza somente uma pasta fixture ignorada.
+`test-profile-storage-isolated.ps1` verifica as permissoes em container sem rede,
+sem portas e com dados em tmpfs; credenciais aleatorias nao sao gravadas no repo.
+Os roteiros que verificam containers reais respeitam COMPOSE_FILE e
+COMPOSE_PROJECT_NAME; selecione o projeto correto antes de executa-los.
+Veja docs/pi-214-s3.md para o override local e as restricoes dos bancos legados.

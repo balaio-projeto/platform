@@ -107,3 +107,22 @@ Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do 
 O frontend fala apenas com o Gateway. Catálogo, perfil (autenticação, recuperação de senha e perfil público do artesão), commerce (sacola, checkout e pedidos) e community (perguntas, vídeos, conversas, avaliações, coleções e mediação) atendem suas telas. Ainda não têm endpoint: no perfil, edição dos dados da conta e endereços, configurações do ateliê, selo, coletivos e curadoria; no events, listagem, detalhe e criação de eventos. Essas telas exibem erro até os serviços implementarem as rotas que o Gateway já encaminha. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
 
 A collection Bruno está em `bruno/balaio-api`.
+
+## Imagens de perfil — PI-214
+
+A integracao opcional preserva o primeiro start descrito acima. Para habilitar
+midia, execute scripts/prepare-local-storage.ps1 (sem substituir .env existente)
+e inicie tambem --profile storage. O preparador gera pares independentes e
+habilita o endpoint; somente o Profile Service recebe a credencial consumidora.
+Veja [integracao PI-214](docs/pi-214-s3.md), incluindo as restricoes das migrations
+legadas e os testes sem volumes persistentes. O frontend nao acessa o S3 direto.
+
+Validacao da resolucao em 19/11/2026: Compose padrao e extended sem segredos
+S3 passaram com .env.example; extended+storage passou com configuracao local.
+Provisionamento novo, repetido, endpoint existente e rejeicao de pares
+invalidos/duplicados passaram em fixture. Os oito arquivos originais locais
+foram conferidos e permaneceram identicos. A fixture S3 isolada passou no
+healthcheck, recusa sem credenciais, operacoes permitidas em profile e recusadas
+em catalog/community, sem vazamento das quatro credenciais aleatorias.
+A excecao ListBuckets vazio da versao 4.53 permanece documentada e aprovada.
+A pilha real permaneceu com os 13 containers saudaveis sem recriacao.

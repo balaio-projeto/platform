@@ -8,7 +8,7 @@ $client.Timeout = [TimeSpan]::FromSeconds(15)
 $oldAccess = [Environment]::GetEnvironmentVariable('AWS_ACCESS_KEY_ID')
 $oldSecret = [Environment]::GetEnvironmentVariable('AWS_SECRET_ACCESS_KEY')
 try {
-    $configText = & docker compose config --format json
+    $configText = & docker compose --profile storage config --format json
     if ($LASTEXITCODE -ne 0) { throw 'Compose invalido. Execute setup-local.ps1.' }
     $config = $configText | ConvertFrom-Json
     $access = $config.services.seaweedfs.environment.AWS_ACCESS_KEY_ID
@@ -17,8 +17,10 @@ try {
     $image = $config.services.seaweedfs.image
     $endpoint = "http://localhost:$port"
     $healthy = $false
+    $storageId = & docker compose --profile storage ps -q seaweedfs
+    if ($LASTEXITCODE -ne 0 -or -not $storageId) { throw 'Storage nao iniciado no projeto Compose selecionado.' }
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
-        $health = & docker inspect balaio-local-seaweedfs-1 --format '{{.State.Health.Status}}'
+        $health = & docker inspect $storageId --format '{{.State.Health.Status}}'
         if ($health -eq 'healthy') { $healthy = $true; break }
         Start-Sleep -Seconds 2
     }
@@ -97,7 +99,7 @@ try {
         $image /opt/balaio/storage/test-network.sh
     if ($LASTEXITCODE -ne 0) { throw 'Network security test failed.' }
 
-    $logs = @(& docker logs balaio-local-seaweedfs-1 2>&1 | ForEach-Object { $_.ToString() }) -join "`n"
+    $logs = @(& docker logs $storageId 2>&1 | ForEach-Object { $_.ToString() }) -join "`n"
     Require (-not ($logs.Contains($access) -or $logs.Contains($secret))) 'Logs PASS: neither actual S3 credential value appears'
 
     if ($IncludeSpecialCharacterTest) {
