@@ -144,6 +144,12 @@ foi testado sem certificado de cliente.
 
 ## Bucket e permissoes
 
+Atualizacao PI-214 Etapa 2 — o preparador tambem gera uma identidade consumidora
+`balaio-profile-service`, com politica de objetos limitada a `profile/*`.
+Credenciais, testes e excecao aceita da versao 4.53 estao no
+[guia S3 do Profile Service](pi-214-s3.md). As identidades de catalogo e comunidade
+continuam pendentes. O par administrativo existente foi preservado.
+
 Bucket unico **`balaio-media`**, criado idempotentemente e privado. Futuros objetos
 devem usar `profile/`, `catalog/` e `community/`; testes usam somente
 `diagnostics/pi213-<identificador>.txt`. Prefixos organizam dados, sem substituir
@@ -585,3 +591,15 @@ permanecerem abertos.
 - [Mini](https://github.com/seaweedfs/seaweedfs/blob/4.53/weed/command/mini.go)
 - [Seguranca](https://github.com/seaweedfs/seaweedfs/blob/4.53/weed/command/scaffold/security.toml)
 - [Wiki mini](https://github.com/seaweedfs/seaweedfs/wiki/Quick-Start-with-weed-mini)
+
+## Nota de integracao PI-214 sobre develop (19/11/2026)
+
+As contagens e comandos antigos deste documento sao evidencias historicas.
+Na develop o SeaweedFS pertence ao perfil storage: use --profile storage para
+seleciona-lo, junto de --profile extended para a pilha completa. O start padrao
+continua sem depender de storage, certificados ou credenciais S3.
+
+O preparador explicito habilita MEDIA_S3_ENDPOINT e preserva valores existentes.
+A identidade consumidora e sua politica continuam restritas a profile/*.
+Configuracao ativa de S3 sem par valido falha; nenhum modo anonimo e habilitado.
+Consulte docs/pi-214-s3.md para os testes isolados e a selecao correta do projeto.
