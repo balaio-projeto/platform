@@ -138,6 +138,23 @@ Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do 
 
 O frontend fala apenas com o Gateway. Catálogo, perfil (autenticação, recuperação de senha, perfil público, conta, configurações do ateliê e selo/curadoria), commerce (sacola, checkout e pedidos) e community (perguntas, vídeos, conversas, avaliações, coleções e mediação) atendem suas telas. Ainda não têm endpoint: no perfil, endereços e coletivos; no events, listagem, detalhe e criação de eventos. Essas telas exibem erro até os serviços implementarem as rotas que o Gateway já encaminha. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
 
+### PI-170 — SMTP da recuperação de senha
+
+O provedor é escolhido no `.env` local/secret store pelas variáveis `PROFILE_SMTP_*`
+e `PROFILE_MAIL_FROM`. `.env.example` preserva padrões locais e documenta Gmail (`smtp.gmail.com:587`, autenticação
+e STARTTLS), com usuário/senha vazios. Use senha de app com verificação em duas
+etapas; não a senha normal do Gmail. O perfil local continua podendo usar SMTP
+de desenvolvimento sem autenticação. A URL `PROFILE_FRONTEND_BASE_URL` precisa
+ser HTTPS e acessível em homologação; `http://localhost:4321` serve só no mesmo
+computador. O Compose encaminha também os timeouts de conexão/leitura/escrita.
+
+O Profile rejeita credenciais incompletas para SMTP autenticado, TLS desativado
+nessa modalidade e URLs relativas/inseguras. Não altere a validação de certificado.
+Após configurar um provedor válido, recrie somente o serviço com
+`docker compose up -d --no-deps --build --wait profile-service`; nenhum volume deve
+ser removido. As mudanças de `.env` não entram automaticamente num container já
+iniciado. Detalhes e testes SMTP isolados estão no [README do Profile](../profile-service/README.md#pi-170--smtp-por-ambiente-e-validação-ponta-a-ponta).
+
 A collection Bruno está em `bruno/balaio-api`.
 
 ## Imagens de perfil — PI-214
