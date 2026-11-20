@@ -39,6 +39,26 @@ Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e
 
 ## Primeiro uso
 
+Para preparar e iniciar automaticamente pelo PowerShell 7, na pasta `platform`:
+
+```powershell
+pwsh -File scripts/start-local.ps1
+```
+
+O comando preserva o `.env` existente, inicia o Docker Desktop se necessario,
+prepara o primeiro uso com os scripts existentes, confere credenciais e bancos
+legados, faz build e aguarda a saude de todos os servicos. Inclui storage quando
+o `.env` habilita `MEDIA_S3_ENDPOINT`. Em instalacoes novas, gera uma senha de banco
+aleatoria; volumes antigos precisam das suas credenciais existentes. Nao executa
+pull, checkout ou atualizacoes de codigo. Nao remove volumes, redefine senhas ou
+modifica historicos Flyway automaticamente.
+
+Use `-NoBuild` para iniciar com as imagens existentes e `-Check` para verificacao
+somente leitura. No primeiro uso, os preparadores requerem Git instalado para
+conferir a protecao dos arquivos privados; nao fazem sincronizacao de branches.
+Um banco com migrations legadas exige a transicao documentada abaixo uma unica
+vez; bancos compativeis recebem novas migrations automaticamente pelo Flyway.
+
 Na pasta `platform`, inicie a pilha completa com um comando:
 
 ```powershell
@@ -89,6 +109,18 @@ docker exec balaio-local-profile-db-1 psql -U balaio_profile_app -d balaio_profi
 ```
 
 `backups/` é ignorado pelo Git. O SQL aborta se o volume já foi migrado ou se o histórico/dados diferem do esquema examinado; nesse caso, não use `repair` automaticamente.
+
+## Banco local com as antigas V5/V6 de mídia
+
+Se o banco registra `V5__create_midias_perfil.sql` (checksum `584367059`) e
+`V6__protect_media_cleanup.sql` (`704505435`), use
+`db/migration/legacy-profile-media-v5-v6-to-current.sql` somente após backup
+verificado e teste em cópia, com o Profile Service parado. Esse caso é diferente
+do legado V1 descrito acima. O script recusa históricos diferentes, mantém os
+checksums das migrations de mídia ao identificá-las como V7/V8 e aplica a V5
+atual de correção dos slugs. A transação preserva contas, mídias e recuperações
+de senha; perfis ausentes de artesãos são criados pela V5. Não execute `repair`
+genérico nem apague volumes para resolver essa divergência.
 
 ## Comandos úteis
 
