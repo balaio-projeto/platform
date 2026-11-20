@@ -136,7 +136,7 @@ Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do 
 
 ## Estado da integração
 
-O frontend fala apenas com o Gateway. Catálogo, perfil (autenticação, recuperação de senha e perfil público do artesão), commerce (sacola, checkout e pedidos) e community (perguntas, vídeos, conversas, avaliações, coleções e mediação) atendem suas telas. Ainda não têm endpoint: no perfil, edição dos dados da conta e endereços, configurações do ateliê, selo, coletivos e curadoria; no events, listagem, detalhe e criação de eventos. Essas telas exibem erro até os serviços implementarem as rotas que o Gateway já encaminha. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
+O frontend fala apenas com o Gateway. Catálogo, perfil (autenticação, recuperação de senha, perfil público, conta, configurações do ateliê e selo/curadoria), commerce (sacola, checkout e pedidos) e community (perguntas, vídeos, conversas, avaliações, coleções e mediação) atendem suas telas. Ainda não têm endpoint: no perfil, endereços e coletivos; no events, listagem, detalhe e criação de eventos. Essas telas exibem erro até os serviços implementarem as rotas que o Gateway já encaminha. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
 
 A collection Bruno está em `bruno/balaio-api`.
 

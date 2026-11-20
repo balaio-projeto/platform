@@ -166,6 +166,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: local
       PROFILE_SERVICE_PORT: "8082"
+      CATALOG_SERVICE_URL: http://catalog-service:8081
       MEDIA_S3_ENDPOINT: ${MEDIA_S3_ENDPOINT:-}
       MEDIA_S3_REGION: us-east-1
       MEDIA_S3_BUCKET: balaio-media
