@@ -234,6 +234,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${COMMERCE_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
       BALAIO_INTERNAL_TOKEN: ${BALAIO_INTERNAL_TOKEN:-balaio-local-internal-token-1234567890}
       CATALOG_SERVICE_URL: http://catalog-service:8081
+      PROFILE_SERVICE_URL: http://profile-service:8082
       MERCADOPAGO_ENVIRONMENT: ${MERCADOPAGO_ENVIRONMENT:-}
       MERCADOPAGO_BASE_URL: https://api.mercadopago.com
       MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
@@ -327,6 +328,12 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://events-db:5432/balaio_events
       SPRING_DATASOURCE_USERNAME: balaio_events_app
       SPRING_DATASOURCE_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
+      # PI-210: somente a chave PÚBLICA é montada; o events-service valida o Bearer localmente.
+      JWT_PUBLIC_KEY_LOCATION: file:/run/keys-public/jwt-public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
+    volumes:
+      - jwt-local-public:/run/keys-public:ro
     ports:
       - "${EVENTS_HOST_PORT:-8085}:8085"
     depends_on:
