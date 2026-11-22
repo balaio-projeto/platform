@@ -2,11 +2,34 @@
 
 Ambiente de desenvolvimento local do Balaio. Cada aplicação tem seu repositório e sua imagem. O Compose monta a rede, os bancos PostgreSQL e os containers que você escolher iniciar.
 
-## Repositórios lado a lado
+## Antes de começar
+
+**Requisitos**
+
+- Git e Docker com Compose v2 (Docker Desktop no Windows e no macOS).
+- Memória: reserve pelo menos 4 GB para o Docker. Com a pilha completa no ar, os 12 containers usam cerca de 2,2 GB; o pico durante o build não foi medido.
+- Portas livres no computador: 4321, 8080 a 8085 e 5433 a 5437 (todas configuráveis por `*_HOST_PORT`).
+- PowerShell 7.2+ só se for usar `scripts/start-local.ps1`, que é opcional.
+
+**Clone os repositórios lado a lado.** Os nomes das pastas importam, porque o Compose monta os caminhos como `../<pasta>`. As branches abaixo são as de integração hoje; confirme com a equipe se mudarem (o `community-service` só tem `main`).
+
+```powershell
+mkdir Repo; cd Repo
+git clone -b develop https://github.com/balaio-projeto/platform.git
+git clone -b develop https://github.com/balaio-projeto/api-gateway.git
+git clone -b develop https://github.com/balaio-projeto/catalog-service.git
+git clone -b develop https://github.com/balaio-projeto/profile-service.git
+git clone -b develop https://github.com/balaio-projeto/commerce-service.git
+git clone -b develop https://github.com/balaio-projeto/events-service.git
+git clone https://github.com/balaio-projeto/community-service.git
+git clone -b develop https://github.com/balaio-projeto/Balaio-Front.git
+```
+
+O resultado é esta estrutura (o frontend fica em `Balaio-Front/Frontend`):
 
 ```text
 Repo/
-├── Balaio-Front/Frontend/  # https://github.com/balaio-projeto/Balaio-Front
+├── Balaio-Front/Frontend/
 ├── api-gateway/
 ├── catalog-service/
 ├── profile-service/
@@ -15,6 +38,8 @@ Repo/
 ├── events-service/
 └── platform/
 ```
+
+**Administrador.** Para entrar como administrador (curadoria), defina `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` (mínimo de 12 caracteres) no `.env` **antes** da primeira subida. Sem isso a pilha funciona normalmente, só não existe conta de administrador. Contas comuns podem ser cadastradas pela tela.
 
 ## O que é configurado automaticamente
 
