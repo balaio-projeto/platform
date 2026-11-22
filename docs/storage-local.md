@@ -15,8 +15,8 @@ de permissoes desta entrega e voltado ao Windows.
 Na pasta `platform`, em uma instalacao nova:
 
 ```powershell
-./scripts/setup-local.ps1
-# Preencher DB_PASSWORD e secrets/admin.env; revisar SMTP, origens e portas.
+pwsh -File scripts/start-local.ps1 -Check   # cria o .env, se faltar
+./scripts/prepare-local-storage.ps1
 docker compose --profile extended config --quiet
 docker compose --profile extended up --build -d
 ```

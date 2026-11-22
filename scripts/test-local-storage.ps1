@@ -9,7 +9,7 @@ $oldAccess = [Environment]::GetEnvironmentVariable('AWS_ACCESS_KEY_ID')
 $oldSecret = [Environment]::GetEnvironmentVariable('AWS_SECRET_ACCESS_KEY')
 try {
     $configText = & docker compose --profile storage config --format json
-    if ($LASTEXITCODE -ne 0) { throw 'Compose invalido. Execute setup-local.ps1.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Compose invalido. Execute start-local.ps1 -Check.' }
     $config = $configText | ConvertFrom-Json
     $access = $config.services.seaweedfs.environment.AWS_ACCESS_KEY_ID
     $secret = $config.services.seaweedfs.environment.AWS_SECRET_ACCESS_KEY
