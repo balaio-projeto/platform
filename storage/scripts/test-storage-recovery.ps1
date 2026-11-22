@@ -7,7 +7,7 @@ if ($PSVersionTable.PSVersion -lt [version]'7.2' -or -not $IsWindows) {
 if (-not $AllowStorageInterruption) {
     throw 'Este teste interrompe somente seaweedfs. Use -AllowStorageInterruption apos planejar a janela local.'
 }
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 Push-Location $repo
 $http = [Net.Http.HttpClient]::new()
 $http.Timeout = [TimeSpan]::FromSeconds(20)

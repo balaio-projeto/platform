@@ -39,35 +39,19 @@ Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e
 
 ## Primeiro uso
 
-Para preparar e iniciar automaticamente pelo PowerShell 7, na pasta `platform`:
-
-```powershell
-pwsh -File scripts/start-local.ps1
-```
-
-O comando preserva o `.env` existente, inicia o Docker Desktop se necessario,
-prepara o primeiro uso com os scripts existentes, confere credenciais e bancos
-legados, faz build e aguarda a saude de todos os servicos. Inclui storage quando
-o `.env` habilita `MEDIA_S3_ENDPOINT`. Em instalacoes novas, gera uma senha de banco
-aleatoria; volumes antigos precisam das suas credenciais existentes. Nao executa
-pull, checkout ou atualizacoes de codigo. Nao remove volumes, redefine senhas ou
-modifica historicos Flyway automaticamente.
-
-Use `-NoBuild` para iniciar com as imagens existentes e `-Check` para verificacao
-somente leitura. No primeiro uso, os preparadores requerem Git instalado para
-conferir a protecao dos arquivos privados; nao fazem sincronizacao de branches.
-Um banco com migrations legadas exige a transicao documentada abaixo uma unica
-vez; bancos compativeis recebem novas migrations automaticamente pelo Flyway.
-
-Na pasta `platform`, inicie a pilha completa com um comando:
+Na pasta `platform`, com o Docker em execução, há dois caminhos equivalentes:
 
 ```powershell
 docker compose --profile extended up --build
 ```
 
-O Compose usa senhas locais demonstrativas para os bancos e um token interno local, gera o par JWT RSA no volume do perfil e não exige `.env`, `admin.env`, chaves `.pem` nem scripts preparatórios. Não use esses defaults fora do computador de desenvolvimento. O administrador inicial não é criado sem `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL`; contas comuns podem ser cadastradas normalmente. O volume da chave privada é montado apenas no perfil; gateway e demais serviços recebem somente a chave pública gerada.
+```powershell
+pwsh -File scripts/start-local.ps1
+```
 
-O SeaweedFS (PI-213) permanece disponível no perfil `storage`, com seu provisionamento descrito em [storage local](docs/storage-local.md); ele não participa do primeiro start nem do checkout PI-54.
+O segundo exige PowerShell 7.2+ e faz a mais: cria o `.env` se faltar (com senha de banco e token interno aleatórios), inicia o Docker Desktop se necessário, recusa iniciar se o banco do perfil tiver migrations legadas (veja [Volumes antigos do perfil](#volumes-antigos-do-perfil)), sobe os bancos primeiro e depois faz build e espera a saúde de todos os serviços. Use `-NoBuild` para reaproveitar as imagens e `-Check` para só verificar. Ele nunca remove volumes, redefine senhas, altera históricos Flyway nem atualiza código.
+
+Em ambos, o Compose usa senhas locais demonstrativas para os bancos e um token interno local, e o `profile-service` gera o par JWT RSA num volume: o volume da chave privada é montado só nele, e os demais serviços recebem apenas a chave pública. O `.env` é opcional; as variáveis estão em `.env.example`. Não use esses defaults fora do computador de desenvolvimento. O administrador inicial só é criado se `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` (mínimo de 12 caracteres) estiverem no `.env`; contas comuns podem ser cadastradas normalmente.
 
 Para pagar de fato no sandbox, forneça opcionalmente `MERCADOPAGO_ENVIRONMENT=sandbox`, `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `MERCADOPAGO_NOTIFICATION_URL` (HTTPS público) e `FRONTEND_RETURN_URL` (HTTPS público). Sem o conjunto completo, o commerce inicia, mas `POST /api/v1/checkout` retorna 503. Configuração parcial ou de produção é recusada. Use conta de teste vendedora e compradora distintas; veja [roteiro PI-54](../commerce-service/docs/PI-54-checkout-pro-sandbox.md). Não versione valores dessas variáveis.
 
@@ -75,52 +59,11 @@ Para pagar de fato no sandbox, forneça opcionalmente `MERCADOPAGO_ENVIRONMENT=s
 
 `docker compose --profile extended up --build` inicia frontend, gateway, perfil, catálogo, commerce, community, events e seus bancos, sem SeaweedFS. O frontend encaminha o checkout e o estado de pedidos ao Gateway. As demais telas continuam conforme sua integração atual.
 
-O perfil `storage` e o roteiro de provisionamento do SeaweedFS são independentes do primeiro start.
-
 O perfil e o gateway recebem `AUTH_ALLOWED_ORIGINS`, com padrão `http://localhost:4321`. Se mudar `FRONTEND_HOST_PORT`, ajuste essa origem. Para HTTP local, `AUTH_COOKIE_SECURE=false`; em HTTPS, configure `true`. A chave privada JWT local fica no volume `jwt-local-private` acessível apenas ao perfil; a chave pública é publicada no volume `jwt-local-public` para os serviços validadores. O par persiste entre reinícios do Compose.
 
-### Volume de perfil legado
+### Volumes antigos do perfil
 
-O volume `balaio-local` criado pela migration `V1__accounts_and_password_recovery.sql` (checksum `449745879`) não valida contra a V1 atual. O procedimento de transição para esse esquema específico está em `db/migration/legacy-profile-v1-to-pi168.sql`. Ele verifica histórico e contas antes de alterar, preserva as três tabelas antigas com prefixo `legacy_`, copia as contas com os mesmos UUIDs e prefixa os hashes bcrypt. Só então reconcilia o registro V1 do Flyway; V2 e V3 são aplicadas ao iniciar o perfil. Sessões e links de recuperação antigos ficam arquivados e deixam de funcionar: entre novamente ou solicite nova recuperação.
-
-Antes da execução, pare o `profile-service`, crie e confira um backup do banco e restaure-o em um projeto Compose separado para testar o SQL. Exemplo no PowerShell, dentro de `platform`:
-
-```powershell
-docker compose stop profile-service
-New-Item -ItemType Directory -Force backups | Out-Null
-docker exec balaio-local-profile-db-1 pg_dump -U balaio_profile_app -d balaio_profile -Fc -f /tmp/profile-before-pi168.dump
-docker cp balaio-local-profile-db-1:/tmp/profile-before-pi168.dump backups/profile-before-pi168.dump
-docker exec balaio-local-profile-db-1 pg_restore -l /tmp/profile-before-pi168.dump
-$env:PROFILE_DB_HOST_PORT='45435'
-docker compose -p balaio-legacy-qa up -d --wait profile-db
-docker cp backups/profile-before-pi168.dump balaio-legacy-qa-profile-db-1:/tmp/profile-before-pi168.dump
-docker exec balaio-legacy-qa-profile-db-1 pg_restore -U balaio_profile_app -d balaio_profile --exit-on-error /tmp/profile-before-pi168.dump
-docker cp db/migration/legacy-profile-v1-to-pi168.sql balaio-legacy-qa-profile-db-1:/tmp/migrate.sql
-docker exec balaio-legacy-qa-profile-db-1 psql -U balaio_profile_app -d balaio_profile -f /tmp/migrate.sql
-```
-
-Depois de validar a cópia com o perfil atual, execute o mesmo SQL no volume original e confira os históricos V1–V3 e as contagens preservadas:
-
-```powershell
-docker cp db/migration/legacy-profile-v1-to-pi168.sql balaio-local-profile-db-1:/tmp/migrate.sql
-docker exec balaio-local-profile-db-1 psql -U balaio_profile_app -d balaio_profile -f /tmp/migrate.sql
-docker compose up -d --wait profile-service
-docker exec balaio-local-profile-db-1 psql -U balaio_profile_app -d balaio_profile -c 'SELECT version, checksum, success FROM flyway_schema_history ORDER BY installed_rank'
-```
-
-`backups/` é ignorado pelo Git. O SQL aborta se o volume já foi migrado ou se o histórico/dados diferem do esquema examinado; nesse caso, não use `repair` automaticamente.
-
-## Banco local com as antigas V5/V6 de mídia
-
-Se o banco registra `V5__create_midias_perfil.sql` (checksum `584367059`) e
-`V6__protect_media_cleanup.sql` (`704505435`), use
-`db/migration/legacy-profile-media-v5-v6-to-current.sql` somente após backup
-verificado e teste em cópia, com o Profile Service parado. Esse caso é diferente
-do legado V1 descrito acima. O script recusa históricos diferentes, mantém os
-checksums das migrations de mídia ao identificá-las como V7/V8 e aplica a V5
-atual de correção dos slugs. A transação preserva contas, mídias e recuperações
-de senha; perfis ausentes de artesãos são criados pela V5. Não execute `repair`
-genérico nem apague volumes para resolver essa divergência.
+Se o volume do profile-service foi criado com as migrations antigas V1 ou V5/V6, o start-local.ps1 recusa iniciar e não altera nada. Siga o procedimento com backup em [docs/migracoes-legadas.md](docs/migracoes-legadas.md).
 
 ## Problemas comuns
 
@@ -140,48 +83,20 @@ docker compose logs -f api-gateway catalog-service
 docker compose down
 ```
 
+Para testar o Gateway e o commerce de ponta a ponta num ambiente descartável: `./scripts/test-gateway-commerce-integration.ps1 -GatewayBase http://localhost:8080 -CommerceBase http://localhost:8083`. Ele lê o token interno e o administrador do `.env` e cria contas, peças e pedidos de teste; não use em ambiente com dados reais.
+
 `docker compose down` preserva os volumes. Os vídeos e capas enviados ao community ficam no volume `community-midia`. `docker compose down -v` apaga os bancos locais e esse volume; use esse comando somente se quiser perder esses dados. As portas HTTP e dos bancos no computador são configuráveis por `*_HOST_PORT` no `.env`; as portas publicadas dos bancos permanecem restritas a `127.0.0.1`, e dentro da rede do Compose as portas internas continuam as mesmas.
 
 Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do banco na tabela acima, além do usuário e da senha configurada para aquele banco. Para executar dentro do Compose, as URLs JDBC e o endereço de cada serviço são configurados automaticamente pelos nomes dos containers. O Spring Boot não lê `.env` sozinho fora do Compose.
 
 ## Estado da integração
 
-O frontend fala apenas com o Gateway. Catálogo, perfil (autenticação, recuperação de senha, perfil público, conta, configurações do ateliê e selo/curadoria), commerce (sacola, checkout e pedidos) e community (perguntas, vídeos, conversas, avaliações, coleções e mediação) atendem suas telas. Ainda não têm endpoint: no perfil, endereços e coletivos; no events, listagem, detalhe e criação de eventos. Essas telas exibem erro até os serviços implementarem as rotas que o Gateway já encaminha. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
+O frontend fala apenas com o Gateway, e todas as telas atuais têm endpoint: catálogo; perfil (autenticação, recuperação de senha, perfil público, conta, endereços, coletivos, configurações do ateliê e selo/curadoria); commerce (sacola, checkout e pedidos); community (perguntas, vídeos, conversas, avaliações, coleções e mediação); events (listagem, detalhe e criação). Recomendações por IA e indicadores administrativos ficam para depois.
 
-### PI-170 — SMTP da recuperação de senha
+### SMTP da recuperação de senha
 
-O provedor é escolhido no `.env` local/secret store pelas variáveis `PROFILE_SMTP_*`
-e `PROFILE_MAIL_FROM`. `.env.example` preserva padrões locais e documenta Gmail (`smtp.gmail.com:587`, autenticação
-e STARTTLS), com usuário/senha vazios. Use senha de app com verificação em duas
-etapas; não a senha normal do Gmail. O perfil local continua podendo usar SMTP
-de desenvolvimento sem autenticação. A URL `PROFILE_FRONTEND_BASE_URL` precisa
-ser HTTPS e acessível em homologação; `http://localhost:4321` serve só no mesmo
-computador. O Compose encaminha também os timeouts de conexão/leitura/escrita.
+O provedor é escolhido no `.env` por `PROFILE_SMTP_*` e `PROFILE_MAIL_FROM`; o `.env.example` traz os padrões locais e um exemplo para Gmail (senha de app, não a senha da conta). `PROFILE_FRONTEND_BASE_URL` precisa ser HTTPS e acessível em homologação; `http://localhost:4321` só serve no mesmo computador. Mudanças de `.env` não chegam a um container em execução: recrie só o perfil com `docker compose up -d --no-deps --build --wait profile-service`. Regras de validação e testes isolados estão no [README do Profile](../profile-service/README.md#pi-170--smtp-por-ambiente-e-validação-ponta-a-ponta).
 
-O Profile rejeita credenciais incompletas para SMTP autenticado, TLS desativado
-nessa modalidade e URLs relativas/inseguras. Não altere a validação de certificado.
-Após configurar um provedor válido, recrie somente o serviço com
-`docker compose up -d --no-deps --build --wait profile-service`; nenhum volume deve
-ser removido. As mudanças de `.env` não entram automaticamente num container já
-iniciado. Detalhes e testes SMTP isolados estão no [README do Profile](../profile-service/README.md#pi-170--smtp-por-ambiente-e-validação-ponta-a-ponta).
+## Storage opcional
 
-A collection Bruno está em `bruno/balaio-api`.
-
-## Imagens de perfil — PI-214
-
-A integracao opcional preserva o primeiro start descrito acima. Para habilitar
-midia, execute scripts/prepare-local-storage.ps1 (sem substituir .env existente)
-e inicie tambem --profile storage. O preparador gera pares independentes e
-habilita o endpoint; somente o Profile Service recebe a credencial consumidora.
-Veja [integracao PI-214](docs/pi-214-s3.md), incluindo as restricoes das migrations
-legadas e os testes sem volumes persistentes. O frontend nao acessa o S3 direto.
-
-Validacao da resolucao em 19/11/2026: Compose padrao e extended sem segredos
-S3 passaram com .env.example; extended+storage passou com configuracao local.
-Provisionamento novo, repetido, endpoint existente e rejeicao de pares
-invalidos/duplicados passaram em fixture. Os oito arquivos originais locais
-foram conferidos e permaneceram identicos. A fixture S3 isolada passou no
-healthcheck, recusa sem credenciais, operacoes permitidas em profile e recusadas
-em catalog/community, sem vazamento das quatro credenciais aleatorias.
-A excecao ListBuckets vazio da versao 4.53 permanece documentada e aprovada.
-A pilha real permaneceu com os 13 containers saudaveis sem recriacao.
+O SeaweedFS (S3 das imagens de perfil) fica no perfil `storage` e tem README, scripts e docs proprios em [storage/](storage/README.md). Nao participa do primeiro start.

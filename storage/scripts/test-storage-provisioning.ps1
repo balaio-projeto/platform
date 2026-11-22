@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion -lt [version]'7.2' -or -not $IsWindows) { throw 'Requer PowerShell 7.2+ no Windows.' }
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $fixtureRoot = Join-Path $repo ('secrets/pi214-provision-' + [Guid]::NewGuid().ToString('N'))
 $envFile = Join-Path $fixtureRoot '.env'
 $prepare = Join-Path $PSScriptRoot 'prepare-local-storage.ps1'
