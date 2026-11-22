@@ -152,8 +152,38 @@ autorizacao.
 Identidade `balaio-local-admin`, acao `Admin`, exclusiva do provisionamento local.
 Nao entregar ao frontend ou as futuras aplicacoes. Antes de integrar consumidores,
 separar identidades/permissoes minimas por dominio e definir limites MIME/tamanho.
-Nao ha politica anonima ou objetos publicos. PI-214, PI-175 e PI-200 nao foram
-implementados.
+Nao ha politica anonima ou objetos publicos. A identidade `balaio-catalog` usa
+somente `Read:balaio-media/catalog/*` e `Write:balaio-media/catalog/*` (Write
+inclui exclusao no SeaweedFS). Nao recebe Admin, List, permissao de ACL ou acesso
+a outros prefixos. O bucket permanece privado; autorizacao do artesao e feita
+pelo catalog-service.
+
+Provisionar de forma idempotente, preservando credenciais existentes:
+
+```powershell
+./scripts/prepare-catalog-storage.ps1 -Enable
+./scripts/prepare-local-storage.ps1
+docker compose --profile storage up -d --no-deps seaweedfs
+docker compose exec -T seaweedfs /bin/sh /opt/balaio/storage/test-catalog-identity.sh
+```
+
+O primeiro script pode criar o `.env` ignorado pelo Git e gera chaves aleatorias
+exclusivas (128/256 bits). Recusa pares incompletos e reutilizacao das credenciais
+administrativas. `-Enable` define `CATALOG_S3_ENABLED=true` e inclui `storage` em `COMPOSE_PROFILES`; valores reais nunca
+sao impressos. Execute o preparador TLS com a conta Windows que usa o Docker.
+O catalog recebe somente seu proprio par; a identidade admin fica no storage.
+Depois de atualizar a imagem do catalog, recrie o servico para receber essas
+variaveis. O storage continua opcional no Compose; quando habilitado, iniciar
+com `--profile storage`. Nao apagar volumes nem regenerar chaves para reiniciar.
+
+Validacao em 22/11/2026: PUT/GET/HEAD/DELETE do catalog aprovados; GET/PUT/DELETE
+em profile retornaram 403; ListObjects, criacao de bucket, prefixo semelhante e
+GET anonimo recusados. ListBuckets retorna HTTP 200 com lista vazia nesta imagem
+(sem expor nomes). Testes repetidos apos restart aprovados. Nenhuma das quatro
+credenciais reais encontrada nos logs do storage. Diagnosticos criam e removem
+somente objetos com identificador exclusivo. Isso valida a identidade S3;
+aceite completo da PI-175 ainda exige fluxo da tela e persistencia de fotos reais
+apos reinicio da aplicacao.
 
 Fluxo: Frontend -> API Gateway -> microsservico -> SeaweedFS. Navegador nao envia
 arquivos ao storage nem recebe DNS Docker. URL pelo gateway depende dos tickets
