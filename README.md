@@ -122,6 +122,16 @@ atual de correção dos slugs. A transação preserva contas, mídias e recupera
 de senha; perfis ausentes de artesãos são criados pela V5. Não execute `repair`
 genérico nem apague volumes para resolver essa divergência.
 
+## Problemas comuns
+
+| Sintoma | Causa e solução |
+| --- | --- |
+| `path ... Balaio-Front/Frontend not found` no build | O clone do frontend precisa estar em `Repo/Balaio-Front/Frontend`, ao lado de `platform`. Se estiver em outra pasta, defina `FRONTEND_CONTEXT` no `.env` com o caminho relativo a `platform`. |
+| `password authentication failed` num banco | O volume já existia com outra senha; o Postgres só lê a senha na criação do volume. Use a senha original em `DB_PASSWORD` ou, se puder perder os dados, `docker compose down -v`. |
+| `port is already allocated` | Outra aplicação usa a porta. Mude a variável `*_HOST_PORT` correspondente no `.env`. |
+| Erro de versão ao rodar `scripts/start-local.ps1` | Use `pwsh` (PowerShell 7.2+), não `powershell.exe`. |
+| Frontend não sobe | Ele espera o gateway ficar saudável, que por sua vez espera catálogo e perfil. Veja `docker compose logs api-gateway profile-service`. |
+
 ## Comandos úteis
 
 ```powershell
