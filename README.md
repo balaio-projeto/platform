@@ -58,13 +58,15 @@ As portas internas e os nomes usados entre containers permanecem fixos. As porta
 | commerce-service | 8083 | commerce-db, 5435 | Opcional |
 | community-service | 8084 | community-db, 5436 | Opcional |
 | events-service | 8085 | events-db, 5437 | Opcional |
-| seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Perfil `storage` |
+| seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Sim (provisionado por `start-local.ps1`) |
 
 Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend encaminha todas as chamadas da API ao Gateway; não há mais Fake API. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
+Acesso pela máquina local: as portas HTTP dos serviços (8081 a 8085) são publicadas somente em `127.0.0.1`, para que outros dispositivos da rede não as alcancem direto. O tráfego da aplicação entra pelo frontend (4321) e pelo gateway (8080). Scripts de teste no próprio computador, como `test-gateway-commerce-integration.ps1`, continuam funcionando em `localhost`.
+
 ## Primeiro uso
 
-Na pasta `platform`, com o Docker em execução, há dois caminhos equivalentes:
+Na pasta `platform`, com o Docker em execução, use o script (caminho recomendado, que sobe também o storage de mídia). O `docker compose` direto sobe a pilha sem provisionar o storage; use-o só com o `.env` já provisionado (veja [Storage de mídia](#storage-de-mídia-seaweedfs)):
 
 ```powershell
 docker compose --profile extended up --build
@@ -74,7 +76,7 @@ docker compose --profile extended up --build
 pwsh -File scripts/start-local.ps1
 ```
 
-O segundo exige PowerShell 7.2+ e faz a mais: cria o `.env` se faltar (com senha de banco e token interno aleatórios), inicia o Docker Desktop se necessário, recusa iniciar se o banco do perfil tiver migrations legadas (veja [Volumes antigos do perfil](#volumes-antigos-do-perfil)), sobe os bancos primeiro e depois faz build e espera a saúde de todos os serviços. Use `-NoBuild` para reaproveitar as imagens e `-Check` para só verificar. Ele nunca remove volumes, redefine senhas, altera históricos Flyway nem atualiza código.
+O script exige PowerShell 7.2+ e faz a mais: cria o `.env` se faltar (com senha de banco e token interno aleatórios), provisiona o storage de mídia na primeira subida, inicia o Docker Desktop se necessário, recusa iniciar se o banco do perfil tiver migrations legadas (veja [Volumes antigos do perfil](#volumes-antigos-do-perfil)), sobe os bancos primeiro e depois faz build e espera a saúde de todos os serviços. Use `-NoBuild` para reaproveitar as imagens e `-Check` para só verificar. Ele nunca remove volumes, redefine senhas, altera históricos Flyway nem atualiza código.
 
 Em ambos, o Compose usa senhas locais demonstrativas para os bancos e um token interno local, e o `profile-service` gera o par JWT RSA num volume: o volume da chave privada é montado só nele, e os demais serviços recebem apenas a chave pública. O `.env` é opcional; as variáveis estão em `.env.example`. Não use esses defaults fora do computador de desenvolvimento. O administrador inicial só é criado se `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` (mínimo de 12 caracteres) estiverem no `.env`; contas comuns podem ser cadastradas normalmente.
 
@@ -122,6 +124,12 @@ O frontend fala apenas com o Gateway, e todas as telas atuais têm endpoint: cat
 
 O provedor é escolhido no `.env` por `PROFILE_SMTP_*` e `PROFILE_MAIL_FROM`; o `.env.example` traz os padrões locais e um exemplo para Gmail (senha de app, não a senha da conta). `PROFILE_FRONTEND_BASE_URL` precisa ser HTTPS e acessível em homologação; `http://localhost:4321` só serve no mesmo computador. Mudanças de `.env` não chegam a um container em execução: recrie só o perfil com `docker compose up -d --no-deps --build --wait profile-service`. Regras de validação e testes isolados estão no [README do Profile](../profile-service/README.md#pi-170--smtp-por-ambiente-e-validação-ponta-a-ponta).
 
-## Storage opcional
+## Storage de mídia (SeaweedFS)
 
-O SeaweedFS (S3 das imagens de perfil) fica em `docker-compose.storage.yml`, no perfil `storage`, e tem README, scripts e docs proprios em [storage/](storage/README.md). Nao participa do primeiro start.
+O SeaweedFS (S3 das imagens de perfil) fica em `docker-compose.storage.yml`, no perfil `storage`, e faz parte da pilha padrão. Na primeira subida, `scripts/start-local.ps1` roda [storage/scripts/prepare-local-storage.ps1](storage/scripts/prepare-local-storage.ps1), que gera credenciais e certificados locais e acrescenta as variáveis `MEDIA_S3_*` ao `.env`. Nas subidas seguintes, ele só reaproveita o que já existe. O `docker compose` direto não faz esse provisionamento. Detalhes, testes e backup estão em [storage/](storage/README.md).
+
+## Dados de demonstração e reset
+
+- **Dados de demonstração:** o catálogo vem com peças de exemplo pela migração `V2` do `catalog-service`. Ela entra apenas em volumes novos. Artesãos, compradores e pedidos não são criados automaticamente: cadastre-os pela tela ou pela API. O administrador existe só se `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` estiverem no `.env` antes da primeira subida.
+- **Reset completo (apaga dados):** `docker compose -f docker-compose.yml -f docker-compose.storage.yml --profile extended --profile storage down -v`. Remove os bancos, as fotos de storage, os vídeos da comunidade e as chaves JWT locais, que são geradas de novo na próxima subida. Não apaga o `.env` nem a pasta `secrets/`.
+- **Reset só dos dados de mídia:** remova apenas os volumes `seaweedfs-data` e `community-midia` com `docker volume rm` (os nomes têm o prefixo do projeto, por exemplo `balaio-local_seaweedfs-data`), depois suba a pilha de novo.

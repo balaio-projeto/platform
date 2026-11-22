@@ -40,7 +40,7 @@ services:
     volumes:
       - jwt-local-public:/run/keys-public:ro
     ports:
-      - "${CATALOG_HOST_PORT:-8081}:8081"
+      - "127.0.0.1:${CATALOG_HOST_PORT:-8081}:8081"
     depends_on:
       catalog-db:
         condition: service_healthy
@@ -141,7 +141,7 @@ services:
       - jwt-local-private:/run/keys-private
       - jwt-local-public:/run/keys-public
     ports:
-      - "${PROFILE_HOST_PORT:-8082}:8082"
+      - "127.0.0.1:${PROFILE_HOST_PORT:-8082}:8082"
     depends_on:
       profile-db:
         condition: service_healthy
@@ -190,7 +190,7 @@ services:
     volumes:
       - jwt-local-public:/run/keys-public:ro
     ports:
-      - "${COMMERCE_HOST_PORT:-8083}:8083"
+      - "127.0.0.1:${COMMERCE_HOST_PORT:-8083}:8083"
     depends_on:
       commerce-db:
         condition: service_healthy
@@ -235,7 +235,7 @@ services:
       - jwt-local-public:/run/keys-public:ro
       - community-midia:/app/dados
     ports:
-      - "${COMMUNITY_HOST_PORT:-8084}:8084"
+      - "127.0.0.1:${COMMUNITY_HOST_PORT:-8084}:8084"
     depends_on:
       community-db:
         condition: service_healthy
@@ -277,7 +277,7 @@ services:
     volumes:
       - jwt-local-public:/run/keys-public:ro
     ports:
-      - "${EVENTS_HOST_PORT:-8085}:8085"
+      - "127.0.0.1:${EVENTS_HOST_PORT:-8085}:8085"
     depends_on:
       events-db:
         condition: service_healthy

@@ -1,6 +1,6 @@
 # Storage local (SeaweedFS)
 
-Serviço S3 opcional que guarda as imagens de perfil dos artesãos. Está definido em [docker-compose.storage.yml](../docker-compose.storage.yml), no perfil `storage`, e não participa do primeiro start. Os comandos abaixo rodam a partir da pasta `platform`, no PowerShell 7.2+. Detalhes do provisionamento, do TLS e dos backups estão em [docs/storage-local.md](docs/storage-local.md).
+Serviço S3 opcional que guarda as imagens de perfil dos artesãos. Está definido em [docker-compose.storage.yml](../docker-compose.storage.yml), no perfil `storage`, e faz parte da pilha padrão: `scripts/start-local.ps1` o provisiona na primeira subida. Os passos abaixo são para provisionar ou reprovisionar à mão. Os comandos abaixo rodam a partir da pasta `platform`, no PowerShell 7.2+. Detalhes do provisionamento, do TLS e dos backups estão em [docs/storage-local.md](docs/storage-local.md).
 
 ## Como habilitar
 
