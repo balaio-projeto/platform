@@ -123,7 +123,7 @@ function Check-Network([string] $Network, [string] $StoragePath, [string] $CaPat
 
 try {
     Docker-OK @('version', '--format', 'Docker Engine {{.Server.Version}}')
-    $config = (& docker compose --profile extended config --format json) | ConvertFrom-Json
+    $config = (& docker compose --profile extended --profile storage config --format json) | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'Compose invalido.' }
     $service = $config.services.seaweedfs
     $script:image = $service.image
@@ -138,7 +138,7 @@ try {
     $source = (& docker inspect $sourceId) | ConvertFrom-Json
     $sourceVolume = @($source.Mounts | Where-Object Destination -eq '/data')[0].Name
     if ($sourceVolume -ne 'balaio-local_seaweedfs-data') { throw 'Volume principal inesperado; interrompido antes das operacoes.' }
-    $otherIds = @(& docker compose --profile extended ps -q | Where-Object { $_ -ne $sourceId })
+    $otherIds = @(& docker compose --profile extended --profile storage ps -q | Where-Object { $_ -ne $sourceId })
     if ($otherIds.Count -ne 12) { throw 'O roteiro exige os 12 outros containers em execucao.' }
     $otherStates = @(& docker inspect @otherIds | ConvertFrom-Json | ForEach-Object { $_ })
     $protectedPaths = @('.env',
