@@ -51,6 +51,12 @@ try {
             $stream.Write($bytes, 0, $bytes.Length)
         } finally { $stream.Dispose() }
     }
+    # O storage de midia faz parte da pilha padrao (PI-208). Na primeira subida o preparador gera
+    # credenciais e certificados locais e acrescenta MEDIA_S3_* ao .env; valores existentes sao preservados.
+    $hasStorageEnv = [IO.File]::ReadAllText($envPath) -match '(?m)^MEDIA_S3_ENDPOINT=[ \t]*[^\s\r\n]+'
+    if (-not $Check -and -not $hasStorageEnv) {
+        & (Join-Path $project 'storage/scripts/prepare-local-storage.ps1')
+    }
     $rawEnv = [IO.File]::ReadAllText($envPath)
     $storage = $rawEnv -match '(?m)^MEDIA_S3_ENDPOINT=[ \t]*[^\s\r\n]+'
     $profiles = @('--profile', 'extended')
