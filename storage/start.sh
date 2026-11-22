@@ -3,7 +3,7 @@ set -eu
 export LC_ALL=C
 
 fail() {
-    echo 'SeaweedFS bloqueado: credenciais S3 ou certificados locais ausentes/invalidos. Consulte docs/storage-local.md.' >&2
+    echo 'SeaweedFS bloqueado: credenciais S3 ou certificados locais ausentes/invalidos. Consulte storage/docs/storage-local.md.' >&2
     exit 1
 }
 

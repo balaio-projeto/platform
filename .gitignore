@@ -1,5 +1,6 @@
 .env
 .env.*
+docker-compose.override.yml
 !.env.example
 .idea/
 .vscode/
@@ -14,7 +15,6 @@ documentacao/
 
 # Private key material
 secrets/*
-!secrets/admin.env.example
 backups/
 *.pem
 *.key

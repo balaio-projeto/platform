@@ -38,8 +38,9 @@ try {
         # Somente instalacoes novas recebem defaults; arquivos existentes nao sao reescritos.
         $content = [IO.File]::ReadAllText((Join-Path $project '.env.example'))
         $password = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24)).ToLowerInvariant()
+        $token = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24)).ToLowerInvariant()
         $defaults = @{
-            DB_PASSWORD=$password; PROFILE_FRONTEND_BASE_URL='http://localhost:4321';
+            DB_PASSWORD=$password; BALAIO_INTERNAL_TOKEN=$token; PROFILE_FRONTEND_BASE_URL='http://localhost:4321';
             PROFILE_SMTP_HOST='localhost'; PROFILE_SMTP_PORT='1025';
             PROFILE_SMTP_AUTH='false'; PROFILE_SMTP_STARTTLS='false'; PROFILE_MAIL_FROM='nao-responda@localhost'
         }
@@ -49,15 +50,15 @@ try {
             $bytes = [Text.UTF8Encoding]::new($false).GetBytes($content)
             $stream.Write($bytes, 0, $bytes.Length)
         } finally { $stream.Dispose() }
-        & (Join-Path $project 'scripts/prepare-internal-token.ps1') -EnvFile $envPath
-        & (Join-Path $project 'scripts/setup-local.ps1')
-        # Os preparadores antigos podem deixar LASTEXITCODE de uma consulta interna.
-        # Falhas PowerShell sao terminantes; nao confundir esse valor com o retorno do setup.
     }
     $rawEnv = [IO.File]::ReadAllText($envPath)
     $storage = $rawEnv -match '(?m)^MEDIA_S3_ENDPOINT=[ \t]*[^\s\r\n]+'
     $profiles = @('--profile', 'extended')
-    if ($storage) { $profiles += @('--profile', 'storage') }
+    $files = @()
+    if ($storage) {
+        $files = @('-f', 'docker-compose.yml', '-f', 'docker-compose.storage.yml')
+        $profiles = $files + $profiles + @('--profile', 'storage')
+    }
     Invoke-LocalCompose ($profiles + @('config', '--quiet'))
 
     # No modo Check, somente leituras. No start, subir primeiro os bancos permite
@@ -99,6 +100,6 @@ try {
     $up = $profiles + @('up', '-d', '--wait', '--wait-timeout', '240')
     if (-not $NoBuild) { $up += '--build' }
     Invoke-LocalCompose $up
-    Invoke-LocalCompose @('ps')
+    Invoke-LocalCompose ($files + @('ps'))
     Write-Output 'Balaio iniciado. Consulte a porta FRONTEND_HOST_PORT do .env (padrao: http://localhost:4321).'
 } finally { Pop-Location }

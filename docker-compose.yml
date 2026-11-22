@@ -1,63 +1,8 @@
 name: balaio-local
 
 services:
-  seaweedfs:
-    profiles: [storage]
-    # SeaweedFS 4.53 / Apache-2.0. See docs/storage-local.md.
-    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
-    restart: unless-stopped
-    tmpfs:
-      - /tmp
-    working_dir: /etc/seaweedfs
-    entrypoint: ["/bin/sh", "/opt/balaio/storage/start.sh"]
-    command:
-      - mini
-      - -dir=/data
-      - -ip=seaweedfs
-      - -ip.bind=0.0.0.0
-      - -s3.port=8333
-      - -s3.iam.readOnly=true
-      - -s3.port.iceberg=0
-      - -s3.port.lance=0
-      - -webdav=false
-      # mini 4.53 waits for the admin HTTP listener; it binds loopback without auth.
-      - -admin.ui=true
-      - -admin.port.legacy=0
-      - -admin.worker.ip=127.0.0.1
-      - -filer.disableDirListing=true
-      - -filer.exposeDirectoryData=false
-    environment:
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
-      MEDIA_S3_ACCESS_KEY_ID: ${MEDIA_S3_ACCESS_KEY_ID:-}
-      MEDIA_S3_SECRET_ACCESS_KEY: ${MEDIA_S3_SECRET_ACCESS_KEY:-}
-      S3_BUCKET: balaio-media
-    ports:
-      - "127.0.0.1:${S3_HOST_PORT:-8333}:8333"
-    volumes:
-      - seaweedfs-data:/data
-      - ./storage:/opt/balaio/storage:ro
-      - type: bind
-        source: ./storage/security.toml
-        target: /etc/seaweedfs/security.toml
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ./secrets/seaweedfs
-        target: /run/seaweedfs
-        read_only: true
-        bind:
-          create_host_path: false
-    healthcheck:
-      test: ["CMD", "/bin/sh", "/opt/balaio/storage/healthcheck.sh"]
-      interval: 15s
-      timeout: 10s
-      retries: 8
-      start_period: 90s
-
   catalog-db:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
@@ -131,18 +76,21 @@ services:
   frontend:
     image: balaio/frontend:local
     build:
-      context: ../Balaio-Front/Frontend
+      context: ${FRONTEND_CONTEXT:-../Balaio-Front/Frontend}
       dockerfile: Dockerfile
+      args:
+        API_GATEWAY_URL: http://api-gateway:8080/api/v1
     environment:
       API_GATEWAY_URL: http://api-gateway:8080/api/v1
       AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:-http://localhost:4321}
     ports:
       - "${FRONTEND_HOST_PORT:-4321}:7879"
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
 
   profile-db:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_profile
       POSTGRES_USER: balaio_profile_app
@@ -167,11 +115,6 @@ services:
       SPRING_PROFILES_ACTIVE: local
       PROFILE_SERVICE_PORT: "8082"
       CATALOG_SERVICE_URL: http://catalog-service:8081
-      MEDIA_S3_ENDPOINT: ${MEDIA_S3_ENDPOINT:-}
-      MEDIA_S3_REGION: us-east-1
-      MEDIA_S3_BUCKET: balaio-media
-      MEDIA_S3_ACCESS_KEY_ID: ${MEDIA_S3_ACCESS_KEY_ID:-}
-      MEDIA_S3_SECRET_ACCESS_KEY: ${MEDIA_S3_SECRET_ACCESS_KEY:-}
       SPRING_DATASOURCE_URL: jdbc:postgresql://profile-db:5432/balaio_profile
       SPRING_DATASOURCE_USERNAME: balaio_profile_app
       SPRING_DATASOURCE_PASSWORD: ${PROFILE_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
@@ -205,7 +148,7 @@ services:
 
   commerce-db:
     profiles: [extended]
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_commerce
       POSTGRES_USER: balaio_commerce_app
@@ -256,7 +199,7 @@ services:
 
   community-db:
     profiles: [extended]
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_community
       POSTGRES_USER: balaio_community_app
@@ -301,7 +244,7 @@ services:
 
   events-db:
     profiles: [extended]
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_events
       POSTGRES_USER: balaio_events_app
@@ -328,7 +271,6 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://events-db:5432/balaio_events
       SPRING_DATASOURCE_USERNAME: balaio_events_app
       SPRING_DATASOURCE_PASSWORD: ${EVENTS_DB_PASSWORD:-${DB_PASSWORD:-balaio-local-db}}
-      # PI-210: somente a chave PÚBLICA é montada; o events-service valida o Bearer localmente.
       JWT_PUBLIC_KEY_LOCATION: file:/run/keys-public/jwt-public.pem
       JWT_ISSUER: ${JWT_ISSUER:-balaio-local}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-balaio-api}
@@ -339,11 +281,12 @@ services:
     depends_on:
       events-db:
         condition: service_healthy
+      profile-service:
+        condition: service_healthy
 
 volumes:
   jwt-local-private:
   jwt-local-public:
-  seaweedfs-data:
   catalog-db-data:
   profile-db-data:
   commerce-db-data:

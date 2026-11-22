@@ -128,8 +128,8 @@ $mediation = Chamar $GatewayBase 'POST' '/api/v1/admin/mediacoes' @{
 } @{ Authorization = "Bearer $buyerJwt" }
 Exigir ($mediation.Status -eq 201) 'abertura de mediação pelo comprador'
 $mediationId = $mediation.Data.dados.id
-$adminEmail = LerConfig "$root/secrets/admin.env" 'ADMIN_EMAIL'
-$adminPassword = LerConfig "$root/secrets/admin.env" 'ADMIN_SENHA_INICIAL'
+$adminEmail = LerConfig "$root/.env" 'ADMIN_EMAIL'
+$adminPassword = LerConfig "$root/.env" 'ADMIN_SENHA_INICIAL'
 $admin = Chamar $GatewayBase 'POST' '/api/v1/auth/login' @{
     email = $adminEmail; senha = $adminPassword
 }

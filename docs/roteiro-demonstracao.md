@@ -1,13 +1,13 @@
 # Roteiro de demonstração (ambiente local)
 
-Roteiro para avaliar os fluxos principais do Balaio ponta a ponta. A configuração inicial (`.env`, chaves JWT, SMTP) está em [README.md](../README.md), seção "Primeiro uso".
+Roteiro para avaliar os fluxos principais do Balaio ponta a ponta. A subida do ambiente está em [README.md](../README.md), seção "Primeiro uso".
 
-Cada passo indica o resultado esperado. Passos marcados como **PENDENTE** dependem de algo que ainda não está disponível neste ambiente.
+Cada passo indica o resultado esperado. Passos marcados como **PENDENTE** dependem de credenciais ou configuração que você precisa fornecer.
 
 ## Pré-requisitos
 
 - Docker Desktop em execução.
-- `.env` criado a partir de `.env.example`, com as variáveis do README.
+- `.env` opcional: sem ele, o Compose usa os defaults locais. Para o administrador (passo 6), defina `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` nele.
 - Credenciais sandbox do Mercado Pago: **PENDENTE** (necessárias só para o passo 5).
 
 ## 1. Subir o ambiente completo
@@ -18,7 +18,7 @@ docker compose --profile extended up -d --build
 docker compose ps
 ```
 
-Esperado: todos os serviços com status `healthy` (ou `running` nos bancos sem healthcheck próprio). O perfil `extended` inclui eventos, comunidade e commerce.
+Esperado: todos os serviços com status `healthy`. O perfil `extended` inclui eventos, comunidade e commerce.
 
 Frontend: http://localhost:4321 · Gateway: http://localhost:8080
 
@@ -40,7 +40,7 @@ Frontend: http://localhost:4321 · Gateway: http://localhost:8080
    Esperado: perfil e peças ativas. Nenhum e-mail, configuração ou dado privado aparece.
 3. `GET http://localhost:8080/api/v1/artesaos/nao-existe` → 404 `RECURSO_NAO_ENCONTRADO`.
 
-## 4. Conta do comprador e endereços (PI-189)
+## 4. Conta do comprador e endereços
 
 1. Cadastre um comprador pela tela de cadastro ou por `POST /api/v1/auth/cadastro`.
 2. Entre com a conta criada.
@@ -103,17 +103,7 @@ docker compose --profile extended down
 
 Atenção: `docker compose down -v` remove também os volumes, com os dados de todos os bancos.
 
-## Evidências a registrar
+## Limitações do ambiente
 
-- Captura da home com peças do catálogo.
-- Resposta de `GET /api/v1/pecas` com `paginacao`.
-- Resposta 404 de endereço de outro comprador (passo 4).
-- Captura do checkout concluído no sandbox (**PENDENTE**).
-- Captura da fila de curadoria (passo 6).
-
-## Pendências conhecidas
-
-- **HTTPS:** o ambiente atual é apenas HTTP. Ver PI-53.
-- **Checkout:** depende das credenciais sandbox do Mercado Pago (passo 5).
-- **OpenAPI:** não publicado para todos os serviços.
-- **Revisão visual:** home, busca e estados de erro e vazio ainda não foram conferidos no navegador.
+- O ambiente local usa apenas HTTP.
+- O checkout só conclui com as credenciais sandbox do Mercado Pago (passo 5).

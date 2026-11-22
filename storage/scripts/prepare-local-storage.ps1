@@ -1,13 +1,13 @@
 param(
-    [string] $EnvFile = (Join-Path $PSScriptRoot '..\.env'),
-    [string] $SecretsDirectory = (Join-Path $PSScriptRoot '..\secrets')
+    [string] $EnvFile = (Join-Path $PSScriptRoot '..\..\.env'),
+    [string] $SecretsDirectory = (Join-Path $PSScriptRoot '..\..\secrets')
 )
 
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion -lt [version]'7.2') {
     throw 'prepare-local-storage.ps1 requer PowerShell 7.2 ou superior. Nenhum arquivo foi alterado.'
 }
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $EnvFile = [IO.Path]::GetFullPath($EnvFile)
 $SecretsDirectory = [IO.Path]::GetFullPath($SecretsDirectory)
 $tlsDirectory = Join-Path $SecretsDirectory 'seaweedfs'
@@ -22,7 +22,7 @@ foreach ($path in @($EnvFile) + $paths) {
     & git -C $repo ls-files --error-unmatch -- $path 1>$null 2>$null
     if ($LASTEXITCODE -eq 0) { throw 'Arquivo sensivel rastreado pelo Git. Provisionamento recusado.' }
 }
-if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) { throw 'Prepare o .env pelo setup-local.ps1 antes do storage.' }
+if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) { throw 'Crie o .env (start-local.ps1 ou copie .env.example) antes do storage.' }
 $original = [IO.File]::ReadAllText($EnvFile)
 $endpointMatches = [regex]::Matches($original, '(?m)^MEDIA_S3_ENDPOINT=([^\r\n]*)\r?$')
 if ($endpointMatches.Count -gt 1) { throw 'MEDIA_S3_ENDPOINT duplicado; nenhuma alteracao foi gravada no env.' }

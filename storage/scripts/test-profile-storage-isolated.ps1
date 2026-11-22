@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $taskName = 'pi214-policy-' + [Guid]::NewGuid().ToString('N')
 $taskImage = 'chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0'
 $taskStorage = (Resolve-Path (Join-Path $repo 'storage')).Path
