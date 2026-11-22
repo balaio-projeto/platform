@@ -2,6 +2,7 @@ param([switch] $IncludeSpecialCharacterTest)
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion -lt [version]'7.2') { throw 'Requer PowerShell 7.2 ou superior.' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+if (-not $env:COMPOSE_FILE) { $env:COMPOSE_FILE = ('docker-compose.yml', 'docker-compose.storage.yml') -join [IO.Path]::PathSeparator }
 Push-Location $repo
 $client = [Net.Http.HttpClient]::new()
 $client.Timeout = [TimeSpan]::FromSeconds(15)

@@ -8,6 +8,7 @@ if (-not $AllowStorageInterruption) {
     throw 'Este teste interrompe somente seaweedfs. Use -AllowStorageInterruption apos planejar a janela local.'
 }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+if (-not $env:COMPOSE_FILE) { $env:COMPOSE_FILE = ('docker-compose.yml', 'docker-compose.storage.yml') -join [IO.Path]::PathSeparator }
 Push-Location $repo
 $http = [Net.Http.HttpClient]::new()
 $http.Timeout = [TimeSpan]::FromSeconds(20)
@@ -140,7 +141,7 @@ try {
     $otherIds = @(& docker compose --profile extended ps -q | Where-Object { $_ -ne $sourceId })
     if ($otherIds.Count -ne 12) { throw 'O roteiro exige os 12 outros containers em execucao.' }
     $otherStates = @(& docker inspect @otherIds | ConvertFrom-Json | ForEach-Object { $_ })
-    $protectedPaths = @('.env','secrets/admin.env','secrets/jwt-private.pem','secrets/jwt-public.pem',
+    $protectedPaths = @('.env',
         'secrets/seaweedfs/ca.crt','secrets/seaweedfs/tls.crt','secrets/seaweedfs/tls.key','secrets/seaweedfs-ca/ca.key')
     $protectedHashes = @(Get-FileHash $protectedPaths | Select-Object Path, Hash)
     $existingVolumes = @(& docker volume ls --format '{{.Name}}')

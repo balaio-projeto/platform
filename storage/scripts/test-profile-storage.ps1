@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion -lt [version]'7.2') { throw 'Requer PowerShell 7.2+.' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+if (-not $env:COMPOSE_FILE) { $env:COMPOSE_FILE = ('docker-compose.yml', 'docker-compose.storage.yml') -join [IO.Path]::PathSeparator }
 $names = @('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'MEDIA_S3_ACCESS_KEY_ID',
     'MEDIA_S3_SECRET_ACCESS_KEY', 'MEDIA_S3_ENDPOINT')
 $saved = @{}

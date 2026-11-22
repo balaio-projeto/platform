@@ -5,9 +5,12 @@ Serviço S3 opcional que guarda as imagens de perfil dos artesãos. Está defini
 ## Como habilitar
 
 ```powershell
+$env:COMPOSE_FILE = 'docker-compose.yml;docker-compose.storage.yml'   # vale só para esta sessão do PowerShell
 ./storage/scripts/prepare-local-storage.ps1
 docker compose --profile extended --profile storage up -d --build --wait
 ```
+
+`docker-compose.storage.yml` é um complemento: define o `seaweedfs` e entrega `MEDIA_S3_*` ao `profile-service`, e por isso precisa ser carregado junto do principal. Sem ele, o Profile sobe sem S3 mesmo que o `.env` tenha o endpoint. Em vez da variável, dá para usar `docker compose -f docker-compose.yml -f docker-compose.storage.yml ...` em cada comando. O `start-local.ps1` e os scripts de teste já fazem isso sozinhos.
 
 O preparador exige o `.env` (`start-local.ps1` ou cópia do `.env.example`) e acrescenta a ele só o que falta:
 

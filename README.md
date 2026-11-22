@@ -99,4 +99,4 @@ O provedor é escolhido no `.env` por `PROFILE_SMTP_*` e `PROFILE_MAIL_FROM`; o 
 
 ## Storage opcional
 
-O SeaweedFS (S3 das imagens de perfil) fica no perfil `storage` e tem README, scripts e docs proprios em [storage/](storage/README.md). Nao participa do primeiro start.
+O SeaweedFS (S3 das imagens de perfil) fica em `docker-compose.storage.yml`, no perfil `storage`, e tem README, scripts e docs proprios em [storage/](storage/README.md). Nao participa do primeiro start.

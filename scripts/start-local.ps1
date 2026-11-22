@@ -54,7 +54,11 @@ try {
     $rawEnv = [IO.File]::ReadAllText($envPath)
     $storage = $rawEnv -match '(?m)^MEDIA_S3_ENDPOINT=[ \t]*[^\s\r\n]+'
     $profiles = @('--profile', 'extended')
-    if ($storage) { $profiles += @('--profile', 'storage') }
+    $files = @()
+    if ($storage) {
+        $files = @('-f', 'docker-compose.yml', '-f', 'docker-compose.storage.yml')
+        $profiles = $files + $profiles + @('--profile', 'storage')
+    }
     Invoke-LocalCompose ($profiles + @('config', '--quiet'))
 
     # No modo Check, somente leituras. No start, subir primeiro os bancos permite
@@ -96,6 +100,6 @@ try {
     $up = $profiles + @('up', '-d', '--wait', '--wait-timeout', '240')
     if (-not $NoBuild) { $up += '--build' }
     Invoke-LocalCompose $up
-    Invoke-LocalCompose @('ps')
+    Invoke-LocalCompose ($files + @('ps'))
     Write-Output 'Balaio iniciado. Consulte a porta FRONTEND_HOST_PORT do .env (padrao: http://localhost:4321).'
 } finally { Pop-Location }
