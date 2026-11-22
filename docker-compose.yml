@@ -5,7 +5,7 @@ include:
 
 services:
   catalog-db:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
@@ -93,7 +93,7 @@ services:
         condition: service_healthy
 
   profile-db:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_profile
       POSTGRES_USER: balaio_profile_app
@@ -156,7 +156,7 @@ services:
 
   commerce-db:
     profiles: [extended]
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_commerce
       POSTGRES_USER: balaio_commerce_app
@@ -207,7 +207,7 @@ services:
 
   community-db:
     profiles: [extended]
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_community
       POSTGRES_USER: balaio_community_app
@@ -252,7 +252,7 @@ services:
 
   events-db:
     profiles: [extended]
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: balaio_events
       POSTGRES_USER: balaio_events_app
