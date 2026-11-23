@@ -1,67 +1,55 @@
-# ADR 004 — Isolar a mídia da comunidade em um bucket privado
+# ADR-004: Isolar a mídia da comunidade em um bucket privado
 
-- **Status** — Proposta
-- **Data** — 23/11/2026
-- **Projeto** — Projeto Integrador ORIGEM (Balaio)
-- **Componentes afetados** — `platform` e `community-service`
+- **Status:** Proposta
+- **Data:** 2026-11-23
+- **Autor:** ALLYSSON FELLYPE GOMES MUNIZ (afgm@cesar.school)
+- **Turma:** Embarque (segundas)
+- **Projeto:** Origem · marketplace da economia criativa e do artesanato de Pernambuco
 
-## Contexto e atributo de qualidade
+## Contexto
 
-No Origem, artesãos podem enviar vídeos e capas enquanto a publicação ainda está em rascunho. Nessa etapa, só o autor deve conseguir abrir os arquivos. O `community-service` verifica a visibilidade do vídeo em `VideoService.abrirMidia` antes de acessar o armazenamento pela porta `ArmazenamentoMidiaPort`. Os mesmos endpoints entregam vídeos publicados ao público e atendem requisições parciais de reprodução.
+No Origem, artesãos podem enviar vídeos e capas para revisão antes da publicação. Enquanto o vídeo estiver em rascunho, só o autor deve conseguir abrir esses arquivos. Hoje, o Compose usa um volume local para a mídia da comunidade, embora o community-service já tenha um adaptador S3. O SeaweedFS já atende perfil e catálogo com credenciais separadas. A equipe é pequena, tem um semestre para entregar e precisa respeitar a stack e o modelo de dados acordados com as outras disciplinas, com orçamento de infraestrutura limitado.
 
-O Compose principal guarda a mídia da comunidade no volume `community-midia`. O serviço já tem um adaptador S3 selecionável por configuração, mas o complemento `docker-compose.storage.yml` só provisiona armazenamento para perfil e catálogo. Esses dois serviços usam o mesmo SeaweedFS, com identidades separadas e permissões limitadas aos seus prefixos em `balaio-media`. Integrar a comunidade a esse ambiente exige definir onde guardar os objetos e quem pode acessá-los.
+## Preocupações
 
-O atributo prioritário é **segurança, com foco em confidencialidade**. A leitura de um rascunho precisa continuar restrita ao autor, e as credenciais de outro serviço devem ser insuficientes para acessar esses arquivos. Restringir a escrita e a exclusão também evita que erros de configuração em um serviço alterem a mídia de outro.
-
-## Cenário de qualidade
-
-| Elemento | Descrição |
-| --- | --- |
-| Fonte | Um visitante sem sessão, um artesão que não é o autor e os serviços de perfil e catálogo com suas próprias credenciais S3. |
-| Estímulo | Tentam ler o vídeo ou a capa de um rascunho cuja chave de objeto e cujo ID são conhecidos no teste. |
-| Ambiente | Ambiente de integração com o adaptador S3 ativo, objetos de teste já enviados pelo autor e o bucket privado disponível. |
-| Artefato | Bucket da comunidade, políticas S3 e rotas `/api/v1/videos/{id}/arquivo` e `/api/v1/videos/{id}/capa`. |
-| Resposta | O armazenamento recusa acessos anônimos e de outras identidades de serviço. Pela API, visitantes e outros artesãos recebem HTTP `404` para o rascunho. O autor consegue ler o arquivo e a capa. |
-| Medida | Zero leituras indevidas na matriz de testes. Os dois endpoints retornam `404` para o rascunho nos casos sem autorização, `200` em leituras completas pelo autor e `206` em leitura parcial válida do vídeo pelo autor. Após publicação, o visitante consegue reproduzir o vídeo pela API e a leitura anônima direta no S3 continua bloqueada. |
+Confidencialidade dos rascunhos, isolamento de permissões, compatibilidade com a reprodução parcial, migração de arquivos, custo de infraestrutura, prazo.
 
 ## Decisão
 
-Provisionar um bucket privado `balaio-community-media` na instância SeaweedFS já usada pelo Compose. Criar uma identidade S3 exclusiva da comunidade, com `GetObject`, `PutObject` e `DeleteObject` limitados a objetos desse bucket. A leitura de metadados via `HeadObject`, usada pelo adaptador, deve ser coberta pelo teste da política. Reservar criação, administração e configuração de bucket à identidade de provisionamento.
-
-Configurar `COMMUNITY_MIDIA_ARMAZENAMENTO=s3` no perfil `storage` e fornecer as variáveis com prefixo `COMMUNITY_S3_` somente ao `community-service` entre os serviços da aplicação. Manter o adaptador local como padrão nas execuções sem o perfil de armazenamento. Quando o modo S3 estiver ativo, exigir a configuração completa na inicialização para que valores obrigatórios ausentes sejam detectados na inicialização, com uso do volume local somente por configuração explícita ou padrão fora do perfil.
-
-Manter o `community-service` como intermediário da entrega. Seu controle de visibilidade continua determinando se o leitor pode acessar o rascunho ou a publicação. O serviço conserva as rotas atuais e repassa o intervalo de bytes ao adaptador S3 quando o player solicita uma leitura parcial. A identidade S3 autoriza o serviço a operar no bucket, enquanto a autorização da aplicação determina quais usuários podem ler cada vídeo.
+Provisionar o bucket privado balaio-community-media no SeaweedFS existente, com uma identidade S3 exclusiva do community-service e permissões limitadas aos objetos desse bucket. Usar o adaptador S3 no perfil storage, manter o adaptador local como padrão fora desse perfil e entregar vídeos e capas pela API da comunidade.
 
 ## Justificativa
 
-O bucket dedicado permite aplicar uma política de acesso por serviço e conservar as chaves de objeto já persistidas, geradas por tipo de mídia e ID do vídeo. Também facilita administrar os vídeos e as capas como um conjunto separado sem subir outro servidor S3. A arquitetura de Portas e Adaptadores existente concentra a troca de armazenamento na configuração e no adaptador. A decisão aplica privilégio mínimo à identidade de serviço e verifica a autorização no ponto de entrega ao usuário.
-
-## Alternativas consideradas
-
-| Alternativa | Benefício | Custo ou compromisso |
-| --- | --- | --- |
-| Manter o volume local no perfil `storage` | Preserva a configuração atual e mantém os vídeos disponíveis no ambiente de um único host. | O fluxo integrado deixa de exercitar a autorização S3 e o comportamento de leitura parcial usado no armazenamento de objetos. |
-| Usar um prefixo exclusivo em `balaio-media` | Reaproveita o mesmo bucket e segue o modelo de perfil e catálogo. | As chaves atuais precisariam receber um prefixo da comunidade no adaptador ou em uma migração. A política precisaria ser testada também nos limites do prefixo. |
-| Entregar URLs temporárias assinadas pelo serviço | Transfere o tráfego de reprodução ao storage e reduz a carga no serviço. | A URL pode ser usada por quem a receber até seu vencimento. Seria preciso definir expiração, lidar com mudanças de visibilidade durante esse prazo e ajustar o contrato de entrega. |
+A API verifica a autoria e o estado do vídeo antes de abrir o arquivo. A política do bucket impede a leitura anônima direta e restringe o acesso das identidades de perfil e catálogo. O padrão Portas e Adaptadores permite reaproveitar a mesma regra de visibilidade nos modos local e S3, preservando as rotas e o suporte à leitura parcial.
 
 ## Consequências
 
-- Um erro de permissão ou de configuração no perfil ou no catálogo tem alcance limitado pelas políticas de armazenamento. Uma credencial da comunidade ainda dá acesso aos objetos da própria comunidade, inclusive rascunhos, e sua rotação precisa ser tratada pelo provisionamento.
-- O Compose passa a exigir mais um bucket, uma identidade e uma política. A instância SeaweedFS continua sendo uma dependência compartilhada, e uma interrupção nela pode afetar os três serviços.
-- O `community-service` continua no caminho dos bytes de vídeo. O suporte a `Range` preserva a leitura em partes e o serviço segue responsável pelo tráfego de reprodução.
-- O volume local e o bucket guardam arquivos em locais distintos. Para adotar o modo S3 em um ambiente com mídia existente, copiar os objetos referenciados pelo banco com as mesmas chaves, verificar integridade e leitura antes da troca e preservar o volume de origem durante a validação.
+A comunidade ganha isolamento de acesso sem precisar de uma nova instância de armazenamento. Em troca, a equipe precisa provisionar o bucket, manter a política de acesso e rotacionar as credenciais. O community-service continua responsável pelo tráfego de reprodução, e uma interrupção no SeaweedFS pode afetar os três serviços. Onde já houver mídia no volume local, será necessário copiar os objetos com as mesmas chaves e validar a leitura antes da troca.
 
-## Verificação
+## Alternativas consideradas
 
-1. **Matriz de autorização S3.** Usar uma pilha descartável com um objeto de vídeo e uma capa pré-carregados no bucket privado. Confirmar que a identidade da comunidade grava, consulta metadados, lê e remove seus próprios objetos de teste. Exigir recusa para leitura, escrita e exclusão cruzadas entre a identidade da comunidade e as de perfil e catálogo. Verificar que a leitura anônima é recusada e que nenhuma tentativa indevida altera os objetos de teste.
-2. **Visibilidade pela API.** Criar um rascunho com vídeo e capa pelo `community-service`. Confirmar `200` para o dono e `404` para o visitante e outro artesão nos dois endpoints. Pedir `Range: bytes=0-9` como dono e exigir `206`, `Content-Range` correto e dez bytes iguais aos do arquivo enviado. Publicar e confirmar leitura pública pela API, com leitura direta anônima no S3 ainda recusada.
-3. **Configuração e adoção.** Validar o Compose com e sem o perfil `storage`. Fazer o serviço subir em modo S3 com a configuração completa e verificar a falha de inicialização com uma configuração obrigatória ausente. Para um ambiente com mídia anterior, comparar chaves e conteúdo após a cópia e repetir a verificação pela API antes de concluir a troca.
-
-A proposta será considerada validada quando as verificações passarem no ambiente isolado. Os testes de acesso do perfil e do catálogo servem como base para a matriz da comunidade.
+1. Manter o volume local no perfil storage — Preserva a configuração atual, mas deixa a autorização S3 fora dos testes de integração.
+2. Usar um prefixo no bucket balaio-media — Reaproveita o bucket atual, mas exige adaptar as chaves no código ou migrá-las.
+3. Entregar a mídia diretamente pelo S3 com URLs temporárias assinadas — Reduz o tráfego na API, mas uma URL compartilhada pode dar acesso ao rascunho até expirar.
 
 ## Rastreabilidade
 
-- [Configuração atual do Compose](../../docker-compose.yml) e [complemento de armazenamento](../../docker-compose.storage.yml).
-- [Política S3 do perfil](../../storage/profile-s3-policy.json) e [política S3 do catálogo](../../storage/catalog-s3-policy.json).
-- [Testes de acesso do perfil](../../storage/test-profile-access.sh) e [testes de acesso do catálogo](../../storage/test-catalog-access.sh).
-- No repositório `community-service`, consultar a seção “Armazenamento dos arquivos” do README e as classes `VideoService`, `ArmazenamentoMidiaPort` e `ArmazenamentoS3Adapter` no módulo `video`.
+**Atributo de qualidade:** Segurança (security) · Confidencialidade
+
+**Cenário que originou a decisão:**
+
+> Em um ambiente de integração em operação normal, com o S3 ativo e o vídeo e a capa de um rascunho já armazenados, um visitante sem sessão, outro artesão e os serviços de perfil e catálogo tentam ler os arquivos usando o ID do vídeo ou a chave do objeto. A API retorna 404 para o visitante e o outro artesão, e o bucket privado recusa leituras anônimas ou com credenciais de perfil e catálogo. O cenário passa se houver zero leituras indevidas e se o autor receber 200 nas leituras completas e 206 com os 10 bytes corretos na leitura parcial. Após a publicação, o visitante deve conseguir reproduzir o vídeo pela API, enquanto o acesso direto anônimo ao S3 permanece bloqueado.
+
+**Padrão arquitetural adotado:** Portas e Adaptadores
+
+**Táticas empacotadas:** Encapsular a dependência externa; Usar intermediário (a porta); Inverter e injetar dependência; Isolar dependência externa para teste; Adiar vinculação para tempo de configuração
+
+community-service → VideoService.abrirMidia, ArmazenamentoMidiaPort e ArmazenamentoS3Adapter. No platform, as políticas e os testes de acesso S3 do perfil e do catálogo servem de referência. A versão inicial do ADR foi registrada em platform/docs/adr/, no commit 3b33f8d.
+
+## Verificação
+
+- **Teste do cenário:** Em uma pilha de integração descartável, enviar um vídeo e uma capa como rascunho. Exigir HTTP 200 para leituras completas pelo autor, 404 nos dois endpoints para o visitante e outro artesão, e 206 com Content-Range correto e os primeiros 10 bytes do vídeo ao solicitar Range: bytes=0-9 como autor. Verificar que a identidade da comunidade consegue gravar, consultar metadados, ler e excluir seus próprios objetos de teste, que acessos entre serviços são recusados e que há zero leituras indevidas. Após publicar o vídeo, confirmar que o visitante consegue reproduzi-lo pela API e que o acesso direto anônimo ao S3 continua bloqueado.
+
+---
+
+_Gerado pelo estudo dirigido de Arquitetura de Software · ADS020 · 2026.2._
