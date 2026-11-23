@@ -2,11 +2,34 @@
 
 Ambiente de desenvolvimento local do Balaio. Cada aplicação tem seu repositório e sua imagem. O Compose monta a rede, os bancos PostgreSQL e os containers que você escolher iniciar.
 
-## Repositórios lado a lado
+## Antes de começar
+
+**Requisitos**
+
+- Git e Docker com Compose v2 (Docker Desktop no Windows e no macOS).
+- Memória: reserve pelo menos 4 GB para o Docker. Com a pilha completa no ar, os 12 containers usam cerca de 2,2 GB; o pico durante o build não foi medido.
+- Portas livres no computador: 4321, 8080 a 8085 e 5433 a 5437 (todas configuráveis por `*_HOST_PORT`).
+- PowerShell 7.2+ só se for usar `scripts/start-local.ps1`, que é opcional.
+
+**Clone os repositórios lado a lado.** Os nomes das pastas importam, porque o Compose monta os caminhos como `../<pasta>`. As branches abaixo são as de integração hoje; confirme com a equipe se mudarem (o `community-service` só tem `main`).
+
+```powershell
+mkdir Repo; cd Repo
+git clone -b develop https://github.com/balaio-projeto/platform.git
+git clone -b develop https://github.com/balaio-projeto/api-gateway.git
+git clone -b develop https://github.com/balaio-projeto/catalog-service.git
+git clone -b develop https://github.com/balaio-projeto/profile-service.git
+git clone -b develop https://github.com/balaio-projeto/commerce-service.git
+git clone -b develop https://github.com/balaio-projeto/events-service.git
+git clone https://github.com/balaio-projeto/community-service.git
+git clone -b develop https://github.com/balaio-projeto/Balaio-Front.git
+```
+
+O resultado é esta estrutura (o frontend fica em `Balaio-Front/Frontend`):
 
 ```text
 Repo/
-├── Balaio-Front/Frontend/  # https://github.com/balaio-projeto/Balaio-Front
+├── Balaio-Front/Frontend/
 ├── api-gateway/
 ├── catalog-service/
 ├── profile-service/
@@ -15,6 +38,8 @@ Repo/
 ├── events-service/
 └── platform/
 ```
+
+**Administrador.** Para entrar como administrador (curadoria), defina `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` (mínimo de 12 caracteres) no `.env` **antes** da primeira subida. Sem isso a pilha funciona normalmente, só não existe conta de administrador. Contas comuns podem ser cadastradas pela tela. O admin é criado com troca de senha obrigatória; para o roteiro E2E real do frontend (`npm run test:e2e:real`), defina também `QA_ADMIN_SENHA`, a senha que o preparador de dados grava na primeira troca e usa depois (ver `Balaio-Front/Frontend/docs/qa/matriz-telas.md`).
 
 ## O que é configurado automaticamente
 
@@ -33,21 +58,27 @@ As portas internas e os nomes usados entre containers permanecem fixos. As porta
 | commerce-service | 8083 | commerce-db, 5435 | Opcional |
 | community-service | 8084 | community-db, 5436 | Opcional |
 | events-service | 8085 | events-db, 5437 | Opcional |
-| seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Perfil `storage` |
+| seaweedfs | 8333 (somente loopback) | volume seaweedfs-data | Sim (provisionado por `start-local.ps1`) |
 
 Cada serviço de negócio usa seu próprio banco e volume. O `profile-service` e o Gateway integram a pilha padrão para testes diretos das APIs; o frontend encaminha todas as chamadas da API ao Gateway; não há mais Fake API. Os bancos dos três serviços opcionais são containers separados. O gateway recebe os endereços internos dos cinco serviços mesmo quando algum serviço opcional está parado. As rotas sem implementação no serviço de destino ainda retornarão erro.
 
+Acesso pela máquina local: as portas HTTP dos serviços (8081 a 8085) são publicadas somente em `127.0.0.1`, para que outros dispositivos da rede não as alcancem direto. O tráfego da aplicação entra pelo frontend (4321) e pelo gateway (8080). Scripts de teste no próprio computador, como `test-gateway-commerce-integration.ps1`, continuam funcionando em `localhost`.
+
 ## Primeiro uso
 
-Na pasta `platform`, inicie a pilha completa com um comando:
+Na pasta `platform`, com o Docker em execução, use o script (caminho recomendado, que sobe também o storage de mídia). O `docker compose` direto sobe a pilha sem provisionar o storage; use-o só com o `.env` já provisionado (veja [Storage de mídia](#storage-de-mídia-seaweedfs)):
 
 ```powershell
 docker compose --profile extended up --build
 ```
 
-O Compose usa senhas locais demonstrativas para os bancos e um token interno local, gera o par JWT RSA no volume do perfil e não exige `.env`, `admin.env`, chaves `.pem` nem scripts preparatórios. Não use esses defaults fora do computador de desenvolvimento. O administrador inicial não é criado sem `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL`; contas comuns podem ser cadastradas normalmente. O volume da chave privada é montado apenas no perfil; gateway e demais serviços recebem somente a chave pública gerada.
+```powershell
+pwsh -File scripts/start-local.ps1
+```
 
-O SeaweedFS (PI-213) permanece disponível no perfil `storage`, com seu provisionamento descrito em [storage local](docs/storage-local.md); ele não participa do primeiro start nem do checkout PI-54.
+O script exige PowerShell 7.2+ e faz a mais: cria o `.env` se faltar (com senha de banco e token interno aleatórios), provisiona o storage de mídia na primeira subida, inicia o Docker Desktop se necessário, recusa iniciar se o banco do perfil tiver migrations legadas (veja [Volumes antigos do perfil](#volumes-antigos-do-perfil)), sobe os bancos primeiro e depois faz build e espera a saúde de todos os serviços. Use `-NoBuild` para reaproveitar as imagens e `-Check` para só verificar. Ele nunca remove volumes, redefine senhas, altera históricos Flyway nem atualiza código.
+
+Em ambos, o Compose usa senhas locais demonstrativas para os bancos e um token interno local, e o `profile-service` gera o par JWT RSA num volume: o volume da chave privada é montado só nele, e os demais serviços recebem apenas a chave pública. O `.env` é opcional; as variáveis estão em `.env.example`. Não use esses defaults fora do computador de desenvolvimento. O administrador inicial só é criado se `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` (mínimo de 12 caracteres) estiverem no `.env`; contas comuns podem ser cadastradas normalmente.
 
 Para pagar de fato no sandbox, forneça opcionalmente `MERCADOPAGO_ENVIRONMENT=sandbox`, `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_WEBHOOK_SECRET`, `MERCADOPAGO_NOTIFICATION_URL` (HTTPS público) e `FRONTEND_RETURN_URL` (HTTPS público). Sem o conjunto completo, o commerce inicia, mas `POST /api/v1/checkout` retorna 503. Configuração parcial ou de produção é recusada. Use conta de teste vendedora e compradora distintas; veja [roteiro PI-54](../commerce-service/docs/PI-54-checkout-pro-sandbox.md). Não versione valores dessas variáveis.
 
@@ -55,40 +86,21 @@ Para pagar de fato no sandbox, forneça opcionalmente `MERCADOPAGO_ENVIRONMENT=s
 
 `docker compose --profile extended up --build` inicia frontend, gateway, perfil, catálogo, commerce, community, events e seus bancos, sem SeaweedFS. O frontend encaminha o checkout e o estado de pedidos ao Gateway. As demais telas continuam conforme sua integração atual.
 
-O perfil `storage` e o roteiro de provisionamento do SeaweedFS são independentes do primeiro start.
-
 O perfil e o gateway recebem `AUTH_ALLOWED_ORIGINS`, com padrão `http://localhost:4321`. Se mudar `FRONTEND_HOST_PORT`, ajuste essa origem. Para HTTP local, `AUTH_COOKIE_SECURE=false`; em HTTPS, configure `true`. A chave privada JWT local fica no volume `jwt-local-private` acessível apenas ao perfil; a chave pública é publicada no volume `jwt-local-public` para os serviços validadores. O par persiste entre reinícios do Compose.
 
-### Volume de perfil legado
+### Volumes antigos do perfil
 
-O volume `balaio-local` criado pela migration `V1__accounts_and_password_recovery.sql` (checksum `449745879`) não valida contra a V1 atual. O procedimento de transição para esse esquema específico está em `db/migration/legacy-profile-v1-to-pi168.sql`. Ele verifica histórico e contas antes de alterar, preserva as três tabelas antigas com prefixo `legacy_`, copia as contas com os mesmos UUIDs e prefixa os hashes bcrypt. Só então reconcilia o registro V1 do Flyway; V2 e V3 são aplicadas ao iniciar o perfil. Sessões e links de recuperação antigos ficam arquivados e deixam de funcionar: entre novamente ou solicite nova recuperação.
+Se o volume do profile-service foi criado com as migrations antigas V1 ou V5/V6, o start-local.ps1 recusa iniciar e não altera nada. Siga o procedimento com backup em [docs/migracoes-legadas.md](docs/migracoes-legadas.md).
 
-Antes da execução, pare o `profile-service`, crie e confira um backup do banco e restaure-o em um projeto Compose separado para testar o SQL. Exemplo no PowerShell, dentro de `platform`:
+## Problemas comuns
 
-```powershell
-docker compose stop profile-service
-New-Item -ItemType Directory -Force backups | Out-Null
-docker exec balaio-local-profile-db-1 pg_dump -U balaio_profile_app -d balaio_profile -Fc -f /tmp/profile-before-pi168.dump
-docker cp balaio-local-profile-db-1:/tmp/profile-before-pi168.dump backups/profile-before-pi168.dump
-docker exec balaio-local-profile-db-1 pg_restore -l /tmp/profile-before-pi168.dump
-$env:PROFILE_DB_HOST_PORT='45435'
-docker compose -p balaio-legacy-qa up -d --wait profile-db
-docker cp backups/profile-before-pi168.dump balaio-legacy-qa-profile-db-1:/tmp/profile-before-pi168.dump
-docker exec balaio-legacy-qa-profile-db-1 pg_restore -U balaio_profile_app -d balaio_profile --exit-on-error /tmp/profile-before-pi168.dump
-docker cp db/migration/legacy-profile-v1-to-pi168.sql balaio-legacy-qa-profile-db-1:/tmp/migrate.sql
-docker exec balaio-legacy-qa-profile-db-1 psql -U balaio_profile_app -d balaio_profile -f /tmp/migrate.sql
-```
-
-Depois de validar a cópia com o perfil atual, execute o mesmo SQL no volume original e confira os históricos V1–V3 e as contagens preservadas:
-
-```powershell
-docker cp db/migration/legacy-profile-v1-to-pi168.sql balaio-local-profile-db-1:/tmp/migrate.sql
-docker exec balaio-local-profile-db-1 psql -U balaio_profile_app -d balaio_profile -f /tmp/migrate.sql
-docker compose up -d --wait profile-service
-docker exec balaio-local-profile-db-1 psql -U balaio_profile_app -d balaio_profile -c 'SELECT version, checksum, success FROM flyway_schema_history ORDER BY installed_rank'
-```
-
-`backups/` é ignorado pelo Git. O SQL aborta se o volume já foi migrado ou se o histórico/dados diferem do esquema examinado; nesse caso, não use `repair` automaticamente.
+| Sintoma | Causa e solução |
+| --- | --- |
+| `path ... Balaio-Front/Frontend not found` no build | O clone do frontend precisa estar em `Repo/Balaio-Front/Frontend`, ao lado de `platform`. Se estiver em outra pasta, defina `FRONTEND_CONTEXT` no `.env` com o caminho relativo a `platform`. |
+| `password authentication failed` num banco | O volume já existia com outra senha; o Postgres só lê a senha na criação do volume. Use a senha original em `DB_PASSWORD` ou, se puder perder os dados, `docker compose down -v`. |
+| `port is already allocated` | Outra aplicação usa a porta. Mude a variável `*_HOST_PORT` correspondente no `.env`. |
+| Erro de versão ao rodar `scripts/start-local.ps1` | Use `pwsh` (PowerShell 7.2+), não `powershell.exe`. |
+| Frontend não sobe | Ele espera o gateway ficar saudável, que por sua vez espera catálogo e perfil. Veja `docker compose logs api-gateway profile-service`. |
 
 ## Comandos úteis
 
@@ -98,12 +110,26 @@ docker compose logs -f api-gateway catalog-service
 docker compose down
 ```
 
+Para testar o Gateway e o commerce de ponta a ponta num ambiente descartável: `./scripts/test-gateway-commerce-integration.ps1 -GatewayBase http://localhost:8080 -CommerceBase http://localhost:8083`. Ele lê o token interno e o administrador do `.env` e cria contas, peças e pedidos de teste; não use em ambiente com dados reais.
+
 `docker compose down` preserva os volumes. Os vídeos e capas enviados ao community ficam no volume `community-midia`. `docker compose down -v` apaga os bancos locais e esse volume; use esse comando somente se quiser perder esses dados. As portas HTTP e dos bancos no computador são configuráveis por `*_HOST_PORT` no `.env`; as portas publicadas dos bancos permanecem restritas a `127.0.0.1`, e dentro da rede do Compose as portas internas continuam as mesmas.
 
 Para executar um serviço pela IDE, use a URL JDBC com `localhost` e a porta do banco na tabela acima, além do usuário e da senha configurada para aquele banco. Para executar dentro do Compose, as URLs JDBC e o endereço de cada serviço são configurados automaticamente pelos nomes dos containers. O Spring Boot não lê `.env` sozinho fora do Compose.
 
 ## Estado da integração
 
-O frontend fala apenas com o Gateway. Catálogo, perfil (autenticação, recuperação de senha e perfil público do artesão), commerce (sacola, checkout e pedidos) e community (perguntas, vídeos, conversas, avaliações, coleções e mediação) atendem suas telas. Ainda não têm endpoint: no perfil, edição dos dados da conta e endereços, configurações do ateliê, selo, coletivos e curadoria; no events, listagem, detalhe e criação de eventos. Essas telas exibem erro até os serviços implementarem as rotas que o Gateway já encaminha. Recomendações por IA e indicadores administrativos ficam para depois da entrega das telas atuais.
+O frontend fala apenas com o Gateway, e todas as telas atuais têm endpoint: catálogo; perfil (autenticação, recuperação de senha, perfil público, conta, endereços, coletivos, configurações do ateliê e selo/curadoria); commerce (sacola, checkout e pedidos); community (perguntas, vídeos, conversas, avaliações, coleções e mediação); events (listagem, detalhe e criação). Recomendações por IA e indicadores administrativos ficam para depois.
 
-A collection Bruno está em `bruno/balaio-api`.
+### SMTP da recuperação de senha
+
+O provedor é escolhido no `.env` por `PROFILE_SMTP_*` e `PROFILE_MAIL_FROM`; o `.env.example` traz os padrões locais e um exemplo para Gmail (senha de app, não a senha da conta). `PROFILE_FRONTEND_BASE_URL` precisa ser HTTPS e acessível em homologação; `http://localhost:4321` só serve no mesmo computador. Mudanças de `.env` não chegam a um container em execução: recrie só o perfil com `docker compose up -d --no-deps --build --wait profile-service`. Regras de validação e testes isolados estão no [README do Profile](../profile-service/README.md#pi-170--smtp-por-ambiente-e-validação-ponta-a-ponta).
+
+## Storage de mídia (SeaweedFS)
+
+O SeaweedFS (S3 das imagens de perfil) fica em `docker-compose.storage.yml`, no perfil `storage`, e faz parte da pilha padrão. Na primeira subida, `scripts/start-local.ps1` roda [storage/scripts/prepare-local-storage.ps1](storage/scripts/prepare-local-storage.ps1), que gera credenciais e certificados locais e acrescenta as variáveis `MEDIA_S3_*` ao `.env`. Nas subidas seguintes, ele só reaproveita o que já existe. O `docker compose` direto não faz esse provisionamento. Detalhes, testes e backup estão em [storage/](storage/README.md).
+
+## Dados de demonstração e reset
+
+- **Dados de demonstração:** o catálogo vem com peças de exemplo pela migração `V2` do `catalog-service`. Ela entra apenas em volumes novos. Artesãos, compradores e pedidos não são criados automaticamente: cadastre-os pela tela ou pela API. O administrador existe só se `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` estiverem no `.env` antes da primeira subida.
+- **Reset completo (apaga dados):** `docker compose -f docker-compose.yml -f docker-compose.storage.yml --profile extended --profile storage down -v`. Remove os bancos, as fotos de storage, os vídeos da comunidade e as chaves JWT locais, que são geradas de novo na próxima subida. Não apaga o `.env` nem a pasta `secrets/`.
+- **Reset só dos dados de mídia:** remova apenas os volumes `seaweedfs-data` e `community-midia` com `docker volume rm` (os nomes têm o prefixo do projeto, por exemplo `balaio-local_seaweedfs-data`), depois suba a pilha de novo.

@@ -1,0 +1,78 @@
+services:
+  seaweedfs:
+    profiles: [storage]
+    # SeaweedFS 4.53 / Apache-2.0. See storage/docs/storage-local.md.
+    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
+    restart: unless-stopped
+    tmpfs:
+      - /tmp
+    working_dir: /etc/seaweedfs
+    entrypoint: ["/bin/sh", "/opt/balaio/storage/start.sh"]
+    command:
+      - mini
+      - -dir=/data
+      - -ip=seaweedfs
+      - -ip.bind=0.0.0.0
+      - -s3.port=8333
+      - -s3.iam.readOnly=true
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -webdav=false
+      # mini 4.53 waits for the admin HTTP listener; it binds loopback without auth.
+      - -admin.ui=true
+      - -admin.port.legacy=0
+      - -admin.worker.ip=127.0.0.1
+      - -filer.disableDirListing=true
+      - -filer.exposeDirectoryData=false
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      MEDIA_S3_ACCESS_KEY_ID: ${MEDIA_S3_ACCESS_KEY_ID:-}
+      MEDIA_S3_SECRET_ACCESS_KEY: ${MEDIA_S3_SECRET_ACCESS_KEY:-}
+      CATALOG_S3_ACCESS_KEY_ID: ${CATALOG_S3_ACCESS_KEY_ID:-}
+      CATALOG_S3_SECRET_ACCESS_KEY: ${CATALOG_S3_SECRET_ACCESS_KEY:-}
+      S3_BUCKET: balaio-media
+    ports:
+      - "127.0.0.1:${S3_HOST_PORT:-8333}:8333"
+    volumes:
+      - seaweedfs-data:/data
+      - ./storage:/opt/balaio/storage:ro
+      - type: bind
+        source: ./storage/security.toml
+        target: /etc/seaweedfs/security.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./secrets/seaweedfs
+        target: /run/seaweedfs
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/opt/balaio/storage/healthcheck.sh"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+
+  # Habilita o S3 no profile-service. Carregue este arquivo junto do principal (ver storage/README.md).
+  profile-service:
+    environment:
+      MEDIA_S3_ENDPOINT: ${MEDIA_S3_ENDPOINT:-}
+      MEDIA_S3_REGION: us-east-1
+      MEDIA_S3_BUCKET: balaio-media
+      MEDIA_S3_ACCESS_KEY_ID: ${MEDIA_S3_ACCESS_KEY_ID:-}
+      MEDIA_S3_SECRET_ACCESS_KEY: ${MEDIA_S3_SECRET_ACCESS_KEY:-}
+
+  catalog-service:
+    environment:
+      CATALOG_S3_ENABLED: ${CATALOG_S3_ENABLED:-true}
+      CATALOG_S3_ENDPOINT: ${CATALOG_S3_ENDPOINT:-http://seaweedfs:8333}
+      CATALOG_S3_REGION: us-east-1
+      CATALOG_S3_BUCKET: balaio-media
+      CATALOG_S3_ACCESS_KEY_ID: ${CATALOG_S3_ACCESS_KEY_ID:-}
+      CATALOG_S3_SECRET_ACCESS_KEY: ${CATALOG_S3_SECRET_ACCESS_KEY:-}
+
+volumes:
+  seaweedfs-data:

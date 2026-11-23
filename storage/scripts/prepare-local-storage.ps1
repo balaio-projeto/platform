@@ -1,13 +1,13 @@
 param(
-    [string] $EnvFile = (Join-Path $PSScriptRoot '..\.env'),
-    [string] $SecretsDirectory = (Join-Path $PSScriptRoot '..\secrets')
+    [string] $EnvFile = (Join-Path $PSScriptRoot '..\..\.env'),
+    [string] $SecretsDirectory = (Join-Path $PSScriptRoot '..\..\secrets')
 )
 
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion -lt [version]'7.2') {
     throw 'prepare-local-storage.ps1 requer PowerShell 7.2 ou superior. Nenhum arquivo foi alterado.'
 }
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $EnvFile = [IO.Path]::GetFullPath($EnvFile)
 $SecretsDirectory = [IO.Path]::GetFullPath($SecretsDirectory)
 $tlsDirectory = Join-Path $SecretsDirectory 'seaweedfs'
@@ -22,10 +22,14 @@ foreach ($path in @($EnvFile) + $paths) {
     & git -C $repo ls-files --error-unmatch -- $path 1>$null 2>$null
     if ($LASTEXITCODE -eq 0) { throw 'Arquivo sensivel rastreado pelo Git. Provisionamento recusado.' }
 }
-if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) { throw 'Prepare o .env pelo setup-local.ps1 antes do storage.' }
+if (-not (Test-Path -LiteralPath $EnvFile -PathType Leaf)) { throw 'Crie o .env (start-local.ps1 ou copie .env.example) antes do storage.' }
 $original = [IO.File]::ReadAllText($EnvFile)
+$endpointMatches = [regex]::Matches($original, '(?m)^MEDIA_S3_ENDPOINT=([^\r\n]*)\r?$')
+if ($endpointMatches.Count -gt 1) { throw 'MEDIA_S3_ENDPOINT duplicado; nenhuma alteracao foi gravada no env.' }
 $values = @{}
-foreach ($name in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_HOST_PORT')) {
+foreach ($name in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_HOST_PORT',
+        'MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY',
+        'CATALOG_S3_ACCESS_KEY_ID', 'CATALOG_S3_SECRET_ACCESS_KEY')) {
     $found = [regex]::Matches($original, "(?m)^$name=([^\r\n]*)\r?$")
     if ($found.Count -gt 1) { throw 'Variavel S3 duplicada. Revise o .env sem divulgar os valores.' }
     $value = if ($found.Count) { $found[0].Groups[1].Value } else { '' }
@@ -38,12 +42,32 @@ foreach ($name in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_HOST_PORT'))
     }
     $values[$name] = $value
 }
-$hasAccess = $values.S3_ACCESS_KEY_ID.Length -gt 0
-$hasSecret = $values.S3_SECRET_ACCESS_KEY.Length -gt 0
-if ($hasAccess -xor $hasSecret) { throw 'Par S3 incompleto; nenhum valor existente foi substituido.' }
-if ($hasAccess -and ($values.S3_ACCESS_KEY_ID -notmatch '^[A-Za-z0-9_-]{20,128}$' -or
-        $values.S3_SECRET_ACCESS_KEY -notmatch '^[\x20-\x7e]{40,256}$')) {
-    throw 'Credenciais S3 invalidas; nenhum valor existente foi substituido.'
+$credentialPairs = @(
+    @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'),
+    @('MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY'),
+    @('CATALOG_S3_ACCESS_KEY_ID', 'CATALOG_S3_SECRET_ACCESS_KEY')
+)
+function Test-SharedCredential {
+    for ($left = 0; $left -lt $credentialPairs.Count; $left++) {
+        for ($right = $left + 1; $right -lt $credentialPairs.Count; $right++) {
+            $a = $credentialPairs[$left]; $b = $credentialPairs[$right]
+            if ($values[$a[0]] -and $values[$b[0]] -and
+                    ($values[$a[0]] -ceq $values[$b[0]] -or $values[$a[1]] -ceq $values[$b[1]])) { return $true }
+        }
+    }
+    return $false
+}
+foreach ($pair in $credentialPairs) {
+    $hasAccess = $values[$pair[0]].Length -gt 0
+    $hasSecret = $values[$pair[1]].Length -gt 0
+    if ($hasAccess -xor $hasSecret) { throw 'Par S3 incompleto; nenhum valor existente foi substituido.' }
+    if ($hasAccess -and ($values[$pair[0]] -notmatch '^[A-Za-z0-9_-]{20,128}$' -or
+            $values[$pair[1]] -notmatch '^[\x20-\x7e]{40,256}$')) {
+        throw 'Credenciais S3 invalidas; nenhum valor existente foi substituido.'
+    }
+}
+if (Test-SharedCredential) {
+    throw 'Credenciais consumidoras devem ser distintas das administrativas e entre si.'
 }
 if ($values.S3_HOST_PORT -and ($values.S3_HOST_PORT -notmatch '^\d{1,5}$' -or
         [int]$values.S3_HOST_PORT -lt 1 -or [int]$values.S3_HOST_PORT -gt 65535)) {
@@ -170,20 +194,31 @@ if ($present.Count -eq 0) {
 Assert-Certificates
 
 $updated = $original
-if (-not $hasAccess) {
-    $values.S3_ACCESS_KEY_ID = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(16)).ToLowerInvariant()
-    $values.S3_SECRET_ACCESS_KEY = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
-    foreach ($name in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY')) {
+foreach ($pair in $credentialPairs) {
+    if ($values[$pair[0]]) { continue }
+    $values[$pair[0]] = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(16)).ToLowerInvariant()
+    $values[$pair[1]] = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()
+    foreach ($name in $pair) {
         $line = $name + '=' + $values[$name]
         if ($updated -match "(?m)^$name=") {
             $updated = [regex]::Replace($updated, "(?m)^$name=[^\r\n]*", $line)
         } else { $updated = $updated.TrimEnd("`r", "`n") + "`r`n$line`r`n" }
     }
 }
+if (Test-SharedCredential) {
+    throw 'Os pares S3 devem ser independentes; nenhuma credencial foi gravada no env.'
+}
 if (-not $values.S3_HOST_PORT) {
     if ($updated -match '(?m)^S3_HOST_PORT=') {
         $updated = [regex]::Replace($updated, '(?m)^S3_HOST_PORT=[^\r\n]*', 'S3_HOST_PORT=8333')
     } else { $updated = $updated.TrimEnd("`r", "`n") + "`r`nS3_HOST_PORT=8333`r`n" }
+}
+# Running this explicit preparer opts into profile media. Plain Compose startup
+# remains possible without S3; preserve an endpoint already chosen by the user.
+if ($endpointMatches.Count -eq 0) {
+    $updated = $updated.TrimEnd("`r", "`n") + "`r`nMEDIA_S3_ENDPOINT=http://seaweedfs:8333`r`n"
+} elseif ($endpointMatches[0].Groups[1].Value -in @('', "''", '""')) {
+    $updated = [regex]::Replace($updated, '(?m)^MEDIA_S3_ENDPOINT=[^\r\n]*', 'MEDIA_S3_ENDPOINT=http://seaweedfs:8333')
 }
 if ($updated -cne $original) {
     # Refuse concurrent edits rather than silently overwriting them.

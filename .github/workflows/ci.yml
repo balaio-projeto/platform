@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compose-e-scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar scripts shell (sintaxe e erros do shellcheck)
+        run: |
+          shopt -s nullglob
+          for arquivo in db/init/*.sh storage/*.sh; do
+            bash -n "$arquivo"
+          done
+          shellcheck -S error db/init/*.sh storage/*.sh
+
+      - name: Validar scripts PowerShell (parser)
+        shell: pwsh
+        run: |
+          $erros = 0
+          Get-ChildItem -Recurse -Filter *.ps1 -File | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            foreach ($erro in $parseErrors) {
+              Write-Host "::error file=$($_.FullName)::$($erro.Message)"
+              $erros++
+            }
+          }
+          if ($erros -gt 0) { exit 1 }
+
+      - name: Validar Compose nos perfis documentados
+        # Sem repositórios irmãos: o Compose só precisa resolver a configuração, não construir imagens.
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.yml --profile extended config -q
+          docker compose -f docker-compose.yml -f docker-compose.storage.yml --profile extended --profile storage config -q

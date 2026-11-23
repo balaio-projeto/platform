@@ -7,7 +7,8 @@ if ($PSVersionTable.PSVersion -lt [version]'7.2' -or -not $IsWindows) {
 if (-not $AllowStorageInterruption) {
     throw 'Este teste interrompe somente seaweedfs. Use -AllowStorageInterruption apos planejar a janela local.'
 }
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+if (-not $env:COMPOSE_FILE) { $env:COMPOSE_FILE = ('docker-compose.yml', 'docker-compose.storage.yml') -join [IO.Path]::PathSeparator }
 Push-Location $repo
 $http = [Net.Http.HttpClient]::new()
 $http.Timeout = [TimeSpan]::FromSeconds(20)
@@ -122,7 +123,7 @@ function Check-Network([string] $Network, [string] $StoragePath, [string] $CaPat
 
 try {
     Docker-OK @('version', '--format', 'Docker Engine {{.Server.Version}}')
-    $config = (& docker compose --profile extended config --format json) | ConvertFrom-Json
+    $config = (& docker compose --profile extended --profile storage config --format json) | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'Compose invalido.' }
     $service = $config.services.seaweedfs
     $script:image = $service.image
@@ -137,10 +138,10 @@ try {
     $source = (& docker inspect $sourceId) | ConvertFrom-Json
     $sourceVolume = @($source.Mounts | Where-Object Destination -eq '/data')[0].Name
     if ($sourceVolume -ne 'balaio-local_seaweedfs-data') { throw 'Volume principal inesperado; interrompido antes das operacoes.' }
-    $otherIds = @(& docker compose --profile extended ps -q | Where-Object { $_ -ne $sourceId })
+    $otherIds = @(& docker compose --profile extended --profile storage ps -q | Where-Object { $_ -ne $sourceId })
     if ($otherIds.Count -ne 12) { throw 'O roteiro exige os 12 outros containers em execucao.' }
     $otherStates = @(& docker inspect @otherIds | ConvertFrom-Json | ForEach-Object { $_ })
-    $protectedPaths = @('.env','secrets/admin.env','secrets/jwt-private.pem','secrets/jwt-public.pem',
+    $protectedPaths = @('.env',
         'secrets/seaweedfs/ca.crt','secrets/seaweedfs/tls.crt','secrets/seaweedfs/tls.key','secrets/seaweedfs-ca/ca.key')
     $protectedHashes = @(Get-FileHash $protectedPaths | Select-Object Path, Hash)
     $existingVolumes = @(& docker volume ls --format '{{.Name}}')

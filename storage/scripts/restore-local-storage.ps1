@@ -2,7 +2,7 @@ param([Parameter(Mandatory = $true)][string] $BackupDirectory)
 
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion -lt [version]'7.2' -or -not $IsWindows) { throw 'Requer PowerShell 7.2+ no Windows.' }
-$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $backup = (Resolve-Path -LiteralPath $BackupDirectory).Path
 $manifest = Get-Content -LiteralPath (Join-Path $backup 'manifest.json') -Raw | ConvertFrom-Json
 if (-not $manifest.completed) { throw 'O manifesto nao registra uma validacao completa; investigar antes de restaurar.' }
