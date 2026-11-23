@@ -18,16 +18,30 @@ case "${AWS_SECRET_ACCESS_KEY:-}" in ''|*[!\ -~]*) fail ;; esac
 
 # Storage is optional in develop. PI-213 recovery/CT-14 fixtures can carry only
 # the administrator. A configured consumer must have a complete independent pair.
+require_consumer_pair() {
+    case "$1" in ''|*[!A-Za-z0-9_-]*) fail ;; esac
+    case "$2" in ''|*[!\ -~]*) fail ;; esac
+    [ "${#1}" -ge 20 ] && [ "${#1}" -le 128 ] || fail
+    [ "${#2}" -ge 40 ] && [ "${#2}" -le 256 ] || fail
+    [ "$1" != "$AWS_ACCESS_KEY_ID" ] || fail
+    [ "$2" != "$AWS_SECRET_ACCESS_KEY" ] || fail
+}
+
 profile_identity=false
 if [ -n "${MEDIA_S3_ACCESS_KEY_ID:-}${MEDIA_S3_SECRET_ACCESS_KEY:-}" ]; then
-    case "${MEDIA_S3_ACCESS_KEY_ID:-}" in ''|*[!A-Za-z0-9_-]*) fail ;; esac
-    case "${MEDIA_S3_SECRET_ACCESS_KEY:-}" in ''|*[!\ -~]*) fail ;; esac
-    [ "${#MEDIA_S3_ACCESS_KEY_ID}" -ge 20 ] && [ "${#MEDIA_S3_ACCESS_KEY_ID}" -le 128 ] || fail
-    [ "${#MEDIA_S3_SECRET_ACCESS_KEY}" -ge 40 ] && [ "${#MEDIA_S3_SECRET_ACCESS_KEY}" -le 256 ] || fail
-    [ "$MEDIA_S3_ACCESS_KEY_ID" != "$AWS_ACCESS_KEY_ID" ] || fail
-    [ "$MEDIA_S3_SECRET_ACCESS_KEY" != "$AWS_SECRET_ACCESS_KEY" ] || fail
+    require_consumer_pair "${MEDIA_S3_ACCESS_KEY_ID:-}" "${MEDIA_S3_SECRET_ACCESS_KEY:-}"
     [ -s /opt/balaio/storage/profile-s3-policy.json ] || fail
     profile_identity=true
+fi
+catalog_identity=false
+if [ -n "${CATALOG_S3_ACCESS_KEY_ID:-}${CATALOG_S3_SECRET_ACCESS_KEY:-}" ]; then
+    require_consumer_pair "${CATALOG_S3_ACCESS_KEY_ID:-}" "${CATALOG_S3_SECRET_ACCESS_KEY:-}"
+    if [ "$profile_identity" = true ]; then
+        [ "$CATALOG_S3_ACCESS_KEY_ID" != "$MEDIA_S3_ACCESS_KEY_ID" ] || fail
+        [ "$CATALOG_S3_SECRET_ACCESS_KEY" != "$MEDIA_S3_SECRET_ACCESS_KEY" ] || fail
+    fi
+    [ -s /opt/balaio/storage/catalog-s3-policy.json ] || fail
+    catalog_identity=true
 fi
 
 for file in ca.crt tls.crt tls.key; do
@@ -43,24 +57,44 @@ done
 # SeaweedFS 4.53 logs the access key when using AWS env fallback. Build a
 # deterministic, valid JSON config in tmpfs instead, then remove the fallback
 # variables from weed's environment. Docker exec/healthcheck retain Config.Env.
-access=$(printf '%s' "$AWS_ACCESS_KEY_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
-secret=$(printf '%s' "$AWS_SECRET_ACCESS_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
+json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+consumer_identity() {
+    printf ',{"name":"%s","credentials":[{"accessKey":"%s","secretKey":"%s"}],"policyNames":["%s"]}' \
+        "$1" "$(json_escape "$3")" "$(json_escape "$4")" "$2"
+}
+consumer_policy() {
+    printf '{"name":"%s","content":"%s"}' "$1" "$(tr -d '\r\n' < "$2" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+}
 umask 077
 config=$(mktemp /tmp/balaio-s3.XXXXXX)
-printf '{"identities":[{"name":"balaio-local-admin","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin"]}' \
-    "$access" "$secret" > "$config"
+policies=''
+{
+    printf '{"identities":[{"name":"balaio-local-admin","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin"]}' \
+        "$(json_escape "$AWS_ACCESS_KEY_ID")" "$(json_escape "$AWS_SECRET_ACCESS_KEY")"
+    if [ "$profile_identity" = true ]; then
+        consumer_identity balaio-profile-service balaio-profile-media "$MEDIA_S3_ACCESS_KEY_ID" "$MEDIA_S3_SECRET_ACCESS_KEY"
+    fi
+    if [ "$catalog_identity" = true ]; then
+        consumer_identity balaio-catalog balaio-catalog-media "$CATALOG_S3_ACCESS_KEY_ID" "$CATALOG_S3_SECRET_ACCESS_KEY"
+    fi
+    printf ']'
+} > "$config"
 if [ "$profile_identity" = true ]; then
-    profile_access=$(printf '%s' "$MEDIA_S3_ACCESS_KEY_ID" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    profile_secret=$(printf '%s' "$MEDIA_S3_SECRET_ACCESS_KEY" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    policy=$(tr -d '\r\n' < /opt/balaio/storage/profile-s3-policy.json | sed 's/\\/\\\\/g; s/"/\\"/g')
-    printf ',{"name":"balaio-profile-service","credentials":[{"accessKey":"%s","secretKey":"%s"}],"policyNames":["balaio-profile-media"]}],"policies":[{"name":"balaio-profile-media","content":"%s"}]}\n' \
-        "$profile_access" "$profile_secret" "$policy" >> "$config"
+    policies=$(consumer_policy balaio-profile-media /opt/balaio/storage/profile-s3-policy.json)
+fi
+if [ "$catalog_identity" = true ]; then
+    policies="${policies:+$policies,}$(consumer_policy balaio-catalog-media /opt/balaio/storage/catalog-s3-policy.json)"
+fi
+if [ -n "$policies" ]; then
+    printf ',"policies":[%s]}\n' "$policies" >> "$config"
 else
-    printf ']}\n' >> "$config"
+    printf '}\n' >> "$config"
 fi
 chown seaweed:seaweed "$config"
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY MEDIA_S3_ACCESS_KEY_ID MEDIA_S3_SECRET_ACCESS_KEY
-unset access secret profile_access profile_secret policy
+unset CATALOG_S3_ACCESS_KEY_ID CATALOG_S3_SECRET_ACCESS_KEY policies
 
 # The official entrypoint fixes /data ownership and drops to the seaweed user.
 # TLS parse/validation errors must remain fatal in weed; never add a plaintext fallback.

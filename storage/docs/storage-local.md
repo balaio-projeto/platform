@@ -146,12 +146,57 @@ usam os prefixos `profile/`, `catalog/` e `community/`; os testes usam somente
 `diagnostics/pi213-<identificador>.txt`. Prefixos organizam dados, sem substituir
 autorização.
 
-Há duas identidades: `balaio-local-admin` (ação `Admin`, exclusiva do
-provisionamento e dos testes locais, nunca entregue ao frontend nem aos serviços)
-e `balaio-profile-service`, limitada a `profile/*` (ver o
-[README do storage](../README.md#acesso-do-profile-service)). Catalog e Community
-ainda não usam o storage; quando usarem, cada um precisa da própria identidade com
+Há três identidades: `balaio-local-admin` (ação `Admin`, exclusiva do
+provisionamento e dos testes locais, nunca entregue ao frontend nem aos serviços),
+`balaio-profile-service`, limitada a `profile/*`, e `balaio-catalog`, limitada a
+`catalog/*` (ver o [README do storage](../README.md#acesso-do-catalog-service-pi-175)).
+Community ainda não usa o storage; quando usar, precisa da própria identidade com
 permissões mínimas no seu prefixo. Não há política anônima nem objetos públicos.
+
+### Identidade do catálogo (PI-175 / PI-254)
+
+`balaio-catalog` é ligada por `policyNames` à política
+[catalog-s3-policy.json](../catalog-s3-policy.json): `GetObject`, `PutObject` e
+`DeleteObject` (o equivalente a Read/Write) apenas em `balaio-media/catalog/*`, e
+`ListAllMyBuckets` negado. Não recebe `Admin`, `List`, ACL nem outros prefixos. O
+bucket continua privado: o navegador lê as fotos de peça publicada por
+`GET /api/v1/arquivos/pecas/{nome}` no gateway, e o catalog-service busca o objeto
+com a própria credencial. O PostgreSQL do catálogo guarda só metadados, ordem e a
+chave `catalog/<slug>/<id>.<ext>`.
+
+O preparador gera `CATALOG_S3_ACCESS_KEY_ID` e `CATALOG_S3_SECRET_ACCESS_KEY`
+(128/256 bits aleatórios) no `.env` ignorado pelo Git quando o par não existe,
+preserva pares existentes e recusa par parcial ou reutilizado do administrador ou
+do Profile. `start-local.ps1` executa o preparador sempre que o par do catálogo
+falta, inclusive em instalações que já tinham o storage do Profile.
+`docker-compose.storage.yml` entrega o par só ao `seaweedfs` e ao
+`catalog-service`, com `CATALOG_S3_ENABLED=true`, endpoint
+`http://seaweedfs:8333`, região `us-east-1` e bucket `balaio-media`. Para voltar
+ao modo sem S3 no catálogo, defina `CATALOG_S3_ENABLED=false` no `.env`.
+
+Para aplicar em uma pilha já rodando, sem apagar volumes:
+
+```powershell
+./storage/scripts/prepare-local-storage.ps1
+docker compose -f docker-compose.yml -f docker-compose.storage.yml --profile extended --profile storage up -d --build --wait seaweedfs catalog-service
+./storage/scripts/test-catalog-storage.ps1
+```
+
+`test-catalog-storage.ps1` confere que o par chegou só ao storage e ao catálogo,
+que o container do catálogo recebeu a configuração e roda
+`storage/test-catalog-access.sh` na rede do Compose: PUT/GET/HEAD/DELETE em
+`catalog/*` aprovados; ACL, `profile/*`, `community/*`, prefixo semelhante,
+ListObjects, criação de bucket e GET anônimo recusados (403); ListBuckets segue a
+exceção conhecida do SeaweedFS 4.53 (200 com lista vazia). Por fim verifica que
+nenhuma credencial aparece nos logs do storage e do catálogo. Os diagnósticos
+criam e removem somente objetos com identificador exclusivo.
+
+Validação em 22/11/2026 na pilha local: peça criada pelo gateway com duas fotos em
+data URI (como o formulário do front envia), objetos gravados em `catalog/`,
+download por `GET /api/v1/arquivos/pecas/{nome}` com HTTP 200 e bytes idênticos,
+inclusive após `docker compose restart catalog-service` e após reiniciar o
+`seaweedfs`. Na edição, a foto removida passou a responder 404 e a nova foto 200,
+na ordem enviada.
 
 Fluxo: Frontend -> API Gateway -> microsservico -> SeaweedFS. O navegador não envia
 arquivos ao storage nem recebe nomes DNS do Docker.

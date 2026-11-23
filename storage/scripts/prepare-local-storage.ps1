@@ -28,7 +28,8 @@ $endpointMatches = [regex]::Matches($original, '(?m)^MEDIA_S3_ENDPOINT=([^\r\n]*
 if ($endpointMatches.Count -gt 1) { throw 'MEDIA_S3_ENDPOINT duplicado; nenhuma alteracao foi gravada no env.' }
 $values = @{}
 foreach ($name in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_HOST_PORT',
-        'MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY')) {
+        'MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY',
+        'CATALOG_S3_ACCESS_KEY_ID', 'CATALOG_S3_SECRET_ACCESS_KEY')) {
     $found = [regex]::Matches($original, "(?m)^$name=([^\r\n]*)\r?$")
     if ($found.Count -gt 1) { throw 'Variavel S3 duplicada. Revise o .env sem divulgar os valores.' }
     $value = if ($found.Count) { $found[0].Groups[1].Value } else { '' }
@@ -43,8 +44,19 @@ foreach ($name in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_HOST_PORT',
 }
 $credentialPairs = @(
     @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'),
-    @('MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY')
+    @('MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY'),
+    @('CATALOG_S3_ACCESS_KEY_ID', 'CATALOG_S3_SECRET_ACCESS_KEY')
 )
+function Test-SharedCredential {
+    for ($left = 0; $left -lt $credentialPairs.Count; $left++) {
+        for ($right = $left + 1; $right -lt $credentialPairs.Count; $right++) {
+            $a = $credentialPairs[$left]; $b = $credentialPairs[$right]
+            if ($values[$a[0]] -and $values[$b[0]] -and
+                    ($values[$a[0]] -ceq $values[$b[0]] -or $values[$a[1]] -ceq $values[$b[1]])) { return $true }
+        }
+    }
+    return $false
+}
 foreach ($pair in $credentialPairs) {
     $hasAccess = $values[$pair[0]].Length -gt 0
     $hasSecret = $values[$pair[1]].Length -gt 0
@@ -54,10 +66,8 @@ foreach ($pair in $credentialPairs) {
         throw 'Credenciais S3 invalidas; nenhum valor existente foi substituido.'
     }
 }
-if ($values.MEDIA_S3_ACCESS_KEY_ID -and $values.S3_ACCESS_KEY_ID -and
-        ($values.MEDIA_S3_ACCESS_KEY_ID -ceq $values.S3_ACCESS_KEY_ID -or
-         $values.MEDIA_S3_SECRET_ACCESS_KEY -ceq $values.S3_SECRET_ACCESS_KEY)) {
-    throw 'Credenciais consumidoras devem ser distintas das administrativas.'
+if (Test-SharedCredential) {
+    throw 'Credenciais consumidoras devem ser distintas das administrativas e entre si.'
 }
 if ($values.S3_HOST_PORT -and ($values.S3_HOST_PORT -notmatch '^\d{1,5}$' -or
         [int]$values.S3_HOST_PORT -lt 1 -or [int]$values.S3_HOST_PORT -gt 65535)) {
@@ -195,8 +205,7 @@ foreach ($pair in $credentialPairs) {
         } else { $updated = $updated.TrimEnd("`r", "`n") + "`r`n$line`r`n" }
     }
 }
-if ($values.MEDIA_S3_ACCESS_KEY_ID -ceq $values.S3_ACCESS_KEY_ID -or
-        $values.MEDIA_S3_SECRET_ACCESS_KEY -ceq $values.S3_SECRET_ACCESS_KEY) {
+if (Test-SharedCredential) {
     throw 'Os pares S3 devem ser independentes; nenhuma credencial foi gravada no env.'
 }
 if (-not $values.S3_HOST_PORT) {

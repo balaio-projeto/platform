@@ -1,6 +1,6 @@
 # Storage local (SeaweedFS)
 
-Serviço S3 opcional que guarda as imagens de perfil dos artesãos. Está definido em [docker-compose.storage.yml](../docker-compose.storage.yml), no perfil `storage`, e faz parte da pilha padrão: `scripts/start-local.ps1` o provisiona na primeira subida. Os passos abaixo são para provisionar ou reprovisionar à mão. Os comandos abaixo rodam a partir da pasta `platform`, no PowerShell 7.2+. Detalhes do provisionamento, do TLS e dos backups estão em [docs/storage-local.md](docs/storage-local.md).
+Serviço S3 opcional que guarda as imagens de perfil dos artesãos e as fotos das peças do catálogo. Está definido em [docker-compose.storage.yml](../docker-compose.storage.yml), no perfil `storage`, e faz parte da pilha padrão: `scripts/start-local.ps1` o provisiona na primeira subida. Os passos abaixo são para provisionar ou reprovisionar à mão. Os comandos abaixo rodam a partir da pasta `platform`, no PowerShell 7.2+. Detalhes do provisionamento, do TLS e dos backups estão em [docs/storage-local.md](docs/storage-local.md).
 
 ## Como habilitar
 
@@ -14,7 +14,7 @@ docker compose --profile extended --profile storage up -d --build --wait
 
 O preparador exige o `.env` (`start-local.ps1` ou cópia do `.env.example`) e acrescenta a ele só o que falta:
 
-- dois pares de credenciais aleatórios e independentes (administrador e Profile Service);
+- três pares de credenciais aleatórios e independentes (administrador, Profile Service e Catalog Service);
 - `S3_HOST_PORT` e `MEDIA_S3_ENDPOINT=http://seaweedfs:8333`;
 - certificados RSA 3072 em `secrets/seaweedfs/` e a chave da CA em `secrets/seaweedfs-ca/`.
 
@@ -44,6 +44,12 @@ Na versão 4.53, `ListBuckets` responde HTTP 200 com lista vazia, mesmo com o De
 
 Referências da versão: [schema de identidades](https://github.com/seaweedfs/seaweedfs/blob/4.53/weed/pb/iam.proto), [autorização e ListBuckets](https://github.com/seaweedfs/seaweedfs/blob/4.53/weed/s3api/auth_credentials.go), [handler de ListBuckets](https://github.com/seaweedfs/seaweedfs/blob/4.53/weed/s3api/s3api_bucket_handlers.go).
 
+## Acesso do Catalog Service (PI-175)
+
+A terceira identidade, `balaio-catalog`, usa `policyNames` com [catalog-s3-policy.json](catalog-s3-policy.json): `GetObject`, `PutObject` e `DeleteObject` apenas em `balaio-media/catalog/*`, com `ListAllMyBuckets` negado. O `catalog-service` recebe `CATALOG_S3_ENABLED`, `CATALOG_S3_ENDPOINT`, `CATALOG_S3_REGION`, `CATALOG_S3_BUCKET` e o par `CATALOG_S3_ACCESS_KEY_ID` / `CATALOG_S3_SECRET_ACCESS_KEY`, todos pelo `docker-compose.storage.yml`. Nenhum outro serviço recebe esse par, e o catálogo não recebe o do administrador nem o do Profile. Com o storage carregado e o par ausente, o catálogo se recusa a iniciar; `CATALOG_S3_ENABLED=false` no `.env` desliga o S3 só no catálogo. Detalhes e validação em [docs/storage-local.md](docs/storage-local.md#identidade-do-catálogo-pi-175--pi-254).
+
+Para aplicar o par numa pilha existente: rode o preparador e recrie `seaweedfs` e `catalog-service` com `up -d --build --wait seaweedfs catalog-service`.
+
 ## Testes
 
 | Script | O que verifica | Precisa da pilha no ar |
@@ -52,6 +58,7 @@ Referências da versão: [schema de identidades](https://github.com/seaweedfs/se
 | `test-profile-storage-isolated.ps1` | Política do Profile em container sem rede, sem portas e com dados em tmpfs | Não (exige `secrets/seaweedfs/` já preparado) |
 | `test-local-storage.ps1` | Host, Docker, bucket privado, mTLS e logs; `-IncludeSpecialCharacterTest` cria uma fixture isolada para credenciais com caracteres especiais | Sim (`seaweedfs`) |
 | `test-profile-storage.ps1` | Acesso por prefixo na rede Docker, variáveis do container e logs | Sim |
+| `test-catalog-storage.ps1` | Identidade `balaio-catalog`: acesso só a `catalog/*`, variáveis entregues apenas ao storage e ao catálogo, logs sem credenciais | Sim (`seaweedfs` e `catalog-service`) |
 | `test-storage-recovery.ps1 -AllowStorageInterruption` | Persistência após reinício, backup com parada limpa e restauração em volume e projeto novos | Sim |
 
 Os scripts ficam em `storage/scripts/`. Nenhum imprime segredos e todos limpam só o que criaram. Os que usam containers reais respeitam `COMPOSE_FILE` e `COMPOSE_PROJECT_NAME`.

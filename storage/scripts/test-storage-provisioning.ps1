@@ -14,14 +14,19 @@ try {
         throw 'Preparador nao habilitou o endpoint do Profile Service.'
     }
     $pairs = @{}
-    foreach ($key in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY')) {
+    foreach ($key in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY',
+            'CATALOG_S3_ACCESS_KEY_ID', 'CATALOG_S3_SECRET_ACCESS_KEY')) {
         $match = [regex]::Match($valid, '(?m)^' + $key + '=([^\r\n]+)')
         if (-not $match.Success) { throw 'Credencial nao gerada na instalacao nova.' }
         $pairs[$key] = $match.Groups[1].Value
     }
     if ($pairs.S3_ACCESS_KEY_ID -ceq $pairs.MEDIA_S3_ACCESS_KEY_ID -or
             $pairs.S3_SECRET_ACCESS_KEY -ceq $pairs.MEDIA_S3_SECRET_ACCESS_KEY) { throw 'Pares iguais.' }
-    Write-Output 'PASS: instalacao nova gera dois pares independentes'
+    foreach ($other in @('S3', 'MEDIA_S3')) {
+        if ($pairs.CATALOG_S3_ACCESS_KEY_ID -ceq $pairs[$other + '_ACCESS_KEY_ID'] -or
+                $pairs.CATALOG_S3_SECRET_ACCESS_KEY -ceq $pairs[$other + '_SECRET_ACCESS_KEY']) { throw 'Par do catalogo repetido.' }
+    }
+    Write-Output 'PASS: instalacao nova gera tres pares independentes'
     $hashes = @(Get-ChildItem $fixtureRoot -Recurse -Force -File | ForEach-Object {
         @{path=$_.FullName;hash=(Get-FileHash -LiteralPath $_.FullName).Hash}
     })
@@ -43,12 +48,25 @@ try {
         if (-not $migrated.Contains($key+'='+$pairs[$key])) { throw 'Credencial administrativa alterada.' }
     }
     Write-Output 'PASS: instalacao PI-213 recebe somente o novo par consumidor'
+    $withoutCatalog = [regex]::Replace($valid, '(?m)^CATALOG_S3_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)=[^\r\n]*\r?\n?', '')
+    [IO.File]::WriteAllText($envFile, $withoutCatalog, [Text.UTF8Encoding]::new($false))
+    & $prepare -EnvFile $envFile -SecretsDirectory (Join-Path $fixtureRoot 'secrets')
+    $catalogAdded = [IO.File]::ReadAllText($envFile)
+    foreach ($key in @('S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'MEDIA_S3_ACCESS_KEY_ID', 'MEDIA_S3_SECRET_ACCESS_KEY')) {
+        if (-not $catalogAdded.Contains($key + '=' + $pairs[$key])) { throw 'Par existente alterado ao incluir o catalogo.' }
+    }
+    if ($catalogAdded -notmatch '(?m)^CATALOG_S3_ACCESS_KEY_ID=[A-Za-z0-9_-]{20,128}\r?$' -or
+            $catalogAdded -notmatch '(?m)^CATALOG_S3_SECRET_ACCESS_KEY=[\x20-\x7e]{40,256}\r?$') { throw 'Par do catalogo nao gerado.' }
+    Write-Output 'PASS: instalacao com Profile recebe somente o par do catalogo'
     $invalidCases = @(
         ($valid + "`nMEDIA_S3_ENDPOINT=http://duplicado.invalid:8333`n"),
         [regex]::Replace($valid, '(?m)^MEDIA_S3_SECRET_ACCESS_KEY=[^\r\n]*', 'MEDIA_S3_SECRET_ACCESS_KEY='),
         [regex]::Replace($valid, '(?m)^MEDIA_S3_ACCESS_KEY_ID=[^\r\n]*', 'MEDIA_S3_ACCESS_KEY_ID=short'),
         ($valid + "`nMEDIA_S3_ACCESS_KEY_ID=duplicate`n"),
-        [regex]::Replace($valid, '(?m)^MEDIA_S3_ACCESS_KEY_ID=[^\r\n]*', 'MEDIA_S3_ACCESS_KEY_ID='+$pairs.S3_ACCESS_KEY_ID)
+        [regex]::Replace($valid, '(?m)^MEDIA_S3_ACCESS_KEY_ID=[^\r\n]*', 'MEDIA_S3_ACCESS_KEY_ID='+$pairs.S3_ACCESS_KEY_ID),
+        [regex]::Replace($valid, '(?m)^CATALOG_S3_SECRET_ACCESS_KEY=[^\r\n]*', 'CATALOG_S3_SECRET_ACCESS_KEY='),
+        [regex]::Replace($valid, '(?m)^CATALOG_S3_ACCESS_KEY_ID=[^\r\n]*', 'CATALOG_S3_ACCESS_KEY_ID='+$pairs.MEDIA_S3_ACCESS_KEY_ID),
+        [regex]::Replace($valid, '(?m)^CATALOG_S3_SECRET_ACCESS_KEY=[^\r\n]*', 'CATALOG_S3_SECRET_ACCESS_KEY='+$pairs.S3_SECRET_ACCESS_KEY)
     )
     foreach ($invalid in $invalidCases) {
         [IO.File]::WriteAllText($envFile, $invalid, [Text.UTF8Encoding]::new($false))

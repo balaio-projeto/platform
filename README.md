@@ -39,7 +39,7 @@ Repo/
 └── platform/
 ```
 
-**Administrador.** Para entrar como administrador (curadoria), defina `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` (mínimo de 12 caracteres) no `.env` **antes** da primeira subida. Sem isso a pilha funciona normalmente, só não existe conta de administrador. Contas comuns podem ser cadastradas pela tela.
+**Administrador.** Para entrar como administrador (curadoria), defina `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` (mínimo de 12 caracteres) no `.env` **antes** da primeira subida. Sem isso a pilha funciona normalmente, só não existe conta de administrador. Contas comuns podem ser cadastradas pela tela. O admin é criado com troca de senha obrigatória; para o roteiro E2E real do frontend (`npm run test:e2e:real`), defina também `QA_ADMIN_SENHA`, a senha que o preparador de dados grava na primeira troca e usa depois (ver `Balaio-Front/Frontend/docs/qa/matriz-telas.md`).
 
 ## O que é configurado automaticamente
 
