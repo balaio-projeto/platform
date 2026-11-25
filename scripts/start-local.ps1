@@ -51,22 +51,7 @@ try {
             $stream.Write($bytes, 0, $bytes.Length)
         } finally { $stream.Dispose() }
     }
-    # O storage de midia faz parte da pilha padrao (PI-208). Na primeira subida o preparador gera
-    # credenciais e certificados locais e acrescenta MEDIA_S3_* e CATALOG_S3_* ao .env; valores existentes sao preservados.
-    $currentEnv = [IO.File]::ReadAllText($envPath)
-    $hasStorageEnv = $currentEnv -match '(?m)^MEDIA_S3_ENDPOINT=[ \t]*[^\s\r\n]+'
-    $hasCatalogStorageEnv = $currentEnv -match '(?m)^CATALOG_S3_ACCESS_KEY_ID=[ \t]*[^\s\r\n]+'
-    if (-not $Check -and (-not $hasStorageEnv -or -not $hasCatalogStorageEnv)) {
-        & (Join-Path $project 'storage/scripts/prepare-local-storage.ps1')
-    }
-    $rawEnv = [IO.File]::ReadAllText($envPath)
-    $storage = $rawEnv -match '(?m)^MEDIA_S3_ENDPOINT=[ \t]*[^\s\r\n]+'
     $profiles = @('--profile', 'extended')
-    $files = @()
-    if ($storage) {
-        $files = @('-f', 'docker-compose.yml', '-f', 'docker-compose.storage.yml')
-        $profiles = $files + $profiles + @('--profile', 'storage')
-    }
     Invoke-LocalCompose ($profiles + @('config', '--quiet'))
 
     # No modo Check, somente leituras. No start, subir primeiro os bancos permite
@@ -108,6 +93,6 @@ try {
     $up = $profiles + @('up', '-d', '--wait', '--wait-timeout', '240')
     if (-not $NoBuild) { $up += '--build' }
     Invoke-LocalCompose $up
-    Invoke-LocalCompose ($files + @('ps'))
+    Invoke-LocalCompose @('ps')
     Write-Output 'Balaio iniciado. Consulte a porta FRONTEND_HOST_PORT do .env (padrao: http://localhost:4321).'
 } finally { Pop-Location }
