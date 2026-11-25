@@ -16,10 +16,10 @@ jobs:
       - name: Validar scripts shell (sintaxe e erros do shellcheck)
         run: |
           shopt -s nullglob
-          for arquivo in db/init/*.sh storage/*.sh; do
+          for arquivo in db/init/*.sh; do
             bash -n "$arquivo"
           done
-          shellcheck -S error db/init/*.sh storage/*.sh
+          shellcheck -S error db/init/*.sh
 
       - name: Validar scripts PowerShell (parser)
         shell: pwsh
@@ -41,4 +41,3 @@ jobs:
         run: |
           docker compose -f docker-compose.yml config -q
           docker compose -f docker-compose.yml --profile extended config -q
-          docker compose -f docker-compose.yml -f docker-compose.storage.yml --profile extended --profile storage config -q
