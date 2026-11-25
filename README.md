@@ -133,3 +133,144 @@ O SeaweedFS (S3 das imagens de perfil) fica em `docker-compose.storage.yml`, no 
 - **Dados de demonstração:** o catálogo vem com peças de exemplo pela migração `V2` do `catalog-service`. Ela entra apenas em volumes novos. Artesãos, compradores e pedidos não são criados automaticamente: cadastre-os pela tela ou pela API. O administrador existe só se `ADMIN_EMAIL` e `ADMIN_SENHA_INICIAL` estiverem no `.env` antes da primeira subida.
 - **Reset completo (apaga dados):** `docker compose -f docker-compose.yml -f docker-compose.storage.yml --profile extended --profile storage down -v`. Remove os bancos, as fotos de storage, os vídeos da comunidade e as chaves JWT locais, que são geradas de novo na próxima subida. Não apaga o `.env` nem a pasta `secrets/`.
 - **Reset só dos dados de mídia:** remova apenas os volumes `seaweedfs-data` e `community-midia` com `docker volume rm` (os nomes têm o prefixo do projeto, por exemplo `balaio-local_seaweedfs-data`), depois suba a pilha de novo.
+
+---
+
+## Arquitetura distribuída e benchmark (Parte 2)
+
+### Serviços e por que cada um existe
+
+| Serviço | Responsabilidade | Por que é separado | Banco próprio |
+| --- | --- | --- | --- |
+| api-gateway | Ponto único de entrada, validação de JWT, CORS e matriz de rotas | Concentra a política de acesso fora dos domínios | não |
+| profile-service | Identidade, emissão do JWT RS256 e dados de conta | Ciclo de vida e segurança de identidade próprios | sim |
+| catalog-service | Vitrine (leitura pesada) e reserva atômica de peça única | Leitura intensa e consistência de estoque independentes | sim |
+| commerce-service | Pedido, pagamento, frete e e-mails | Integrações externas instáveis (Mercado Pago, Melhor Envio, SMTP) e filas próprias | sim |
+| community-service | Mediação, avaliações e vídeos | Ritmo de mudança independente e armazenamento de mídia | sim |
+| events-service | Moderação e agenda de eventos | Domínio isolado do comércio | sim |
+
+Nem tudo precisa ser serviço separado: o catálogo e o perfil já justificam a separação pelo ciclo de vida e pela carga; os demais seguem a mesma regra e só se separam onde há fronteira clara.
+
+### Diagrama da arquitetura
+
+```mermaid
+flowchart LR
+    FE[Frontend Astro] --> GW[api-gateway]
+    GW --> PRO[profile-service]
+    GW --> CAT[catalog-service]
+    GW --> COM[commerce-service]
+    GW --> COMU[community-service]
+    GW --> EVT[events-service]
+
+    COM -- "GET /internal/v1/contas/{id}/contato\nGET /internal/v1/contas/{id}/origem-frete" --> PRO
+    COM -- "cotação e reserva de peça única" --> CAT
+    COMU -- "GET /internal/v1/pedidos/{id}\nPOST /internal/v1/pedidos/{id}/decisao-mediacao" --> COM
+    CAT -- "artesao/me" --> PRO
+    PRO -- "peças publicadas (curadoria)" --> CAT
+
+    PRO --> DBP[(profile-db)]
+    CAT --> DBC[(catalog-db)]
+    COM --> DBM[(commerce-db)]
+    COMU --> DBU[(community-db)]
+    EVT --> DBE[(events-db)]
+
+    COM -- "fila pedido_emails (tabela)" --> COM
+    COM -- "webhook e pagamento_notificacoes (tabela)" --> COM
+    COM -- "checkout e webhooks" --> MP[Mercado Pago]
+    COM -- "cotação de frete" --> ME[Melhor Envio]
+    COM -- "SMTP" --> SMTP[SMTP / Mailpit]
+    COMU -- "mídia privada" --> S3[(Storage S3)]
+```
+
+As chamadas internas usam `/internal/v1/**`, protegidas pelo cabeçalho `X-Balaio-Service-Token`. A fila de e-mails e a de webhooks são tabelas no PostgreSQL, processadas por workers agendados.
+
+### Trecho paralelo
+
+- **Arquivo:** `commerce-service/src/main/java/br/com/balaio/commerce/notification/application/EmailPedidoService.java`
+- **Escolha do modo:** linha 67 (`paralelo ? enviarEmParalelo(lote) : enviarEmSequencia(lote)`)
+- **Sequencial:** linhas 71 a 79
+- **Paralelo:** linhas 81 a 97, com threads virtuais (`Executors.newVirtualThreadPerTaskExecutor`) e `Semaphore` limitando a concorrência
+- **Falha por item:** `enviarItem`, linhas 99 em diante; uma falha registra a tentativa e não derruba o lote
+- **Configuração:** `balaio.mail.paralelo` (padrão `false`), `balaio.mail.concorrencia` (padrão 8), `balaio.mail.max-lotes-por-ciclo` (padrão 20)
+
+Testes: `EmailPedidoServiceTest` (fila em memória, sem Docker) e `PosVendaHttpPostgresTest` (PostgreSQL real, com `COMMERCE_POSTGRES_TEST=true`), rodados nos dois modos.
+
+### Metodologia do benchmark
+
+- **O que foi medido:** tempo para esvaziar a fila de e-mails (s) e vazão (e-mails/s), nos modos sequencial e paralelo.
+- **Como foi medido:** `platform/scripts/benchmark-email/medir-drenagem.ps1`. Ele semeia N pedidos com um e-mail pendente cada, sobe o commerce-service com as propriedades do cenário e mede o intervalo entre o primeiro e o último `enviado_em`. Também confere falhas e o total de mensagens no Mailpit.
+- **Matriz:** `platform/scripts/benchmark-email/matriz.ps1`, com 6 cenários e 5 repetições cada.
+- **Latência injetada:** Toxiproxy aplica latência por resposta SMTP (um envio tem várias respostas). Sem latência, o Mailpit responde em milissegundos e o ganho não é interpretável.
+- **Propriedades fixadas:** `mail.smtp.localhost` e `mail.from`, para evitar a consulta DNS reversa do JavaMail a cada envio neste host; `max-lotes-por-ciclo` alto, para drenar a fila inteira em cada ciclo.
+- **Ambiente:** `platform/docs/benchmark/ambiente.md`.
+- **Dados brutos:** `platform/docs/benchmark/resultados-email.csv`.
+
+### Resultados
+
+Média e desvio padrão de 5 repetições por cenário, com 0 falhas e o total de mensagens no Mailpit igual ao volume em todas as execuções (30 execuções, `resultados-email.csv`).
+
+| Volume | Latência por resposta SMTP | Modo | Tempo médio (s) | Desvio padrão (s) | Vazão média (e-mails/s) | Ganho |
+| ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| 1.000 | 0 ms | sequencial | 12,68 | 0,42 | 79,0 ± 2,6 | — |
+| 1.000 | 0 ms | paralelo (concorrência 8) | 2,83 | 0,12 | 353,6 ± 15,9 | 4,5× |
+| 1.000 | 20 ms | sequencial | 159,85 | 2,01 | 6,3 ± 0,1 | — |
+| 1.000 | 20 ms | paralelo (concorrência 8) | 24,94 | 0,22 | 40,1 ± 0,4 | 6,4× |
+| 200 | 100 ms | sequencial | 143,70 | 0,10 | 1,4 ± 0,0 | — |
+| 200 | 100 ms | paralelo (concorrência 8) | 21,19 | 0,07 | 9,4 ± 0,0 | 6,8× |
+
+### Interpretação
+
+- **Onde houve ganho:** com latência de SMTP, o paralelismo acelerou o envio em 6,4× (20 ms) e 6,8× (100 ms), com concorrência 8. O limite teórico é 8×: a parte que não se sobrepõe (a linha de envio e a consulta ao profile, que roda dentro de cada item) ainda é sequencial dentro de cada thread.
+- **Por que a latência domina:** o tempo sequencial segue `e-mails × respostas SMTP × latência`. Com 1.000 e-mails a 20 ms, o tempo esperado é cerca de 160 s (8 respostas por envio), e o medido é 159,85 s. Com 200 e-mails a 100 ms, o esperado é cerca de 140 s (7 respostas) e o medido é 143,7 s.
+- **Controle em 0 ms:** o ganho não desapareceu, caiu para 4,5×. Eu esperava um ganho pequeno, mas não nulo, porque mesmo sem latência de rede cada envio tem trabalho bloqueante (duas consultas ao banco, uma chamada HTTP ao profile e a conexão SMTP) que se sobrepõe entre as threads. Esse número é o limite inferior do ganho em ambiente local.
+- **Concorrência acima do pool do Hikari (padrão de 10 conexões):** medida em 1.000 e-mails com latência de 20 ms, 5 repetições por concorrência (`platform/docs/benchmark/resultados-email-concorrencia.csv`). Com concorrência 4, o tempo foi 40,5 ± 0,4 s; com 8, 24,7 ± 0,0 s; com 16, 16,8 ± 0,2 s (vazão de 59,5 req/s, contra 40,4 com 8). Ou seja, com 16 envios simultâneos, acima do pool, o ganho continua, e não há sinal de saturação do pool.
+- **Concorrência 32:** 8,77 ± 0,09 s e vazão de 114,0 ± 1,2 req/s, com 5 repetições. Esse resultado só foi obtido com aquecimento: a primeira execução sem aquecimento travou sem drenar a fila. O thread dump mostrou threads virtuais presas no `synchronized` do carregador de classes do Spring Boot (`JarUrlClassLoader`), com as oito carriers bloqueadas. Nenhuma espera por conexão do Hikari apareceu, então o problema não é o pool, e sim o carregamento de classes sob concorrência no primeiro uso do código. Com aquecimento de 200 e-mails na mesma JVM, a execução concluiu normalmente.
+- **Resumo da concorrência (1.000 e-mails, 20 ms):** 4 → 40,5 s; 8 → 24,7 s; 16 → 16,8 s; 32 → 8,8 s. O ganho continua acima das 10 conexões do pool, e não há sinal de saturação do pool neste intervalo. Como o aquecimento foi necessário só para 32, vale notar que a medição de 32 é a única que depende de metodologia adicional.
+
+### Vitrine: carga concorrente (HTTP)
+
+Metodologia: `GET /api/v1/pecas?tamanho=12` no catalog-service (porta direta, sem gateway), com 21.030 peças (18.927 públicas). Carga com k6 (`grafana/k6`, via Docker) e usuários virtuais constantes. Cada nível tem 10 s de aquecimento descartados e 5 repetições de 30 s. Vazão = requisições ÷ 30 s. Dados brutos em `platform/docs/benchmark/http/resultados-vitrine.csv`; scripts em `platform/scripts/benchmark-http/`.
+
+| Usuários virtuais | Vazão (req/s) | p50 (ms) | p95 (ms) | p99 (ms) |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 51,7 ± 2,0 | 18,7 ± 0,7 | 23,4 ± 1,6 | 27,8 ± 2,1 |
+| 10 | 402,1 ± 10,0 | 23,9 ± 0,7 | 30,7 ± 2,2 | 38,6 ± 5,5 |
+| 50 | 391,3 ± 29,3 | 122,4 ± 10,8 | 166,8 ± 17,9 | 213,5 ± 19,7 |
+
+Média ± desvio padrão de 5 repetições. Interpretação:
+
+- De 1 para 10 usuários, a vazão sobe quase 8× e a latência praticamente não muda: a vitrine escala bem enquanto há CPU disponível.
+- De 10 para 50 usuários, a vazão fica estável (cerca de 390 a 400 req/s) e a latência p50 sobe 5×. O sistema saturou.
+- O ponto de saturação não é só do catálogo: o k6, a JVM do catálogo e o PostgreSQL dividem os mesmos 8 núcleos físicos da máquina. Não é possível separar o limite do serviço do limite do gerador de carga neste ambiente.
+- A medição com o k6 da própria janela de 30 s teve uma repetição com a duração inflada (uma pausa no encerramento). Por isso a vazão é calculada como requisições ÷ 30 s, e não pela taxa reportada pelo k6.
+
+### Painel do artesão: sequencial x paralelo
+
+Metodologia: `GET /api/v1/artesao/painel/resumo` no commerce-service, com o catálogo respondendo 200 peças do artesão (cerca de 115 KB). A latência é injetada na resposta do catálogo pelo Toxiproxy. Os dois modos são o mesmo código, com `balaio.painel.paralelo=false` (sequencial) ou `true` (paralelo, padrão). Medição com `curl` (tempo total do cliente): 5 chamadas de aquecimento e 30 cronometradas por repetição, 5 repetições. Dados brutos em `platform/docs/benchmark/painel/resultados-painel.csv`; script em `platform/scripts/benchmark-painel/`.
+
+| Latência do catálogo | Sequencial (ms) | Paralelo (ms) | Diferença (ms) |
+| ---: | ---: | ---: | ---: |
+| 0 ms | 138,7 ± 2,7 | 138,5 ± 1,0 | 0,1 |
+| 100 ms | 237,2 ± 1,6 | 236,1 ± 2,0 | 1,1 |
+| 300 ms | 436,8 ± 2,7 | 436,5 ± 1,3 | 0,3 |
+
+Média ± desvio padrão de 5 repetições. Interpretação:
+
+- Nos dois modos, o tempo cresce exatamente com a latência injetada (cerca de 138 ms + latência). Isso confirma que a chamada ao catálogo domina o tempo do painel.
+- A diferença entre os modos (no máximo 1,1 ms) fica dentro do desvio padrão. O modo paralelo só esconde o trabalho das consultas locais do painel, e esse trabalho é de poucos milissegundos.
+- Portanto, neste caso o paralelismo não traz ganho mensurável. É o resultado esperado quando uma das partes é desprezível, e ele mostra onde o paralelismo não ajuda, como pede o item 3.2.
+- Os 138 ms com latência zero são o custo do próprio catálogo, do JSON de 115 KB e da chamada HTTP local. Esse custo não foi decomposto nesta medição.
+
+### Riscos e limitações
+
+- **Chamadas síncronas** entre serviços (acoplamento temporal): se o profile-service cair, o envio de e-mail falha e é reenviado depois.
+- **Entrega at-least-once:** o e-mail é marcado como enviado depois do SMTP. Uma queda entre os dois pode gerar reenvio.
+- **Tabelas de fila** crescem com o tempo e precisam de limpeza.
+- **Múltiplas réplicas do worker** não foram testadas; o `FOR UPDATE SKIP LOCKED` evita processamento duplicado, mas não há teste de carga com várias réplicas.
+- **SMTP simulado:** o benchmark usa Mailpit com latência artificial, não um provedor real.
+- **Ambiente único:** cliente, serviços, banco e SMTP rodam na mesma máquina, com disputa de CPU e de rede local.
+- **Consulta DNS reversa do JavaMail:** neste host ela custava vários segundos por envio. As propriedades fixadas removem esse custo; sem elas, o ganho do paralelismo seria medido sobre uma espera de DNS, não de SMTP.
+
+### Evidência de funcionamento
+
+*A preencher (item 3.4 do plano): logs das chamadas entre serviços e a fila sendo drenada.*

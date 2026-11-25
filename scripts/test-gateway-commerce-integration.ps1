@@ -65,7 +65,7 @@ function CriarPeca($name) {
 
 $slug = CriarPeca "Vaso QA PI190 $unique"
 $checkout = @{
-    itens = @(@{ slug = $slug; quantidade = 1 }); freteId = 'padrao'; meio = 'pix'
+    itens = @(@{ slug = $slug; quantidade = 1 }); freteId = 'padrao'; meio = 'checkout_pro'
     endereco = @{ cep = '52021030'; endereco = 'Rua de teste, 100'; cidade = 'Recife'; estado = 'PE' }
 }
 $buyerHeader = @{ Authorization = "Bearer $buyerJwt"; 'Idempotency-Key' = "qa-pi190-$unique" }
@@ -84,13 +84,10 @@ Exigir ($competing.Status -eq 409) 'segunda compra da peça única recusada'
 $repeat = Chamar $GatewayBase 'POST' '/api/v1/checkout' $checkout $buyerHeader
 Exigir ($repeat.Data.dados.id -eq $orderId) 'replay idempotente do checkout'
 
-$withoutToken = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento" @{
-    eventoId = "qa-pagamento-$unique"; resultado = 'aprovado'
-}
-Exigir ($withoutToken.Status -eq 403) 'pagamento interno exige token'
-$paid = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento" @{
-    eventoId = "qa-pagamento-$unique"; resultado = 'aprovado'
-} @{ 'X-Balaio-Service-Token' = $token }
+# Pagamento simulado (balaio.pagamento.simulador.ativo=true): aprova pelo mesmo caminho do webhook.
+$withoutToken = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento-simulado" $null
+Exigir ($withoutToken.Status -eq 403) 'pagamento simulado exige token'
+$paid = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento-simulado" $null @{ 'X-Balaio-Service-Token' = $token }
 Exigir ($paid.Data.dados.estado -eq 'confirmado') 'confirmação simulada consome reserva'
 $sellerPending = Chamar $GatewayBase 'GET' '/api/v1/artesao/pedidos-pendentes' $null @{
     Authorization = "Bearer $artisanJwt"
