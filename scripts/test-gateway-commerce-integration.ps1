@@ -1,7 +1,9 @@
 # Roteiro manual de integracao do Gateway com o commerce; cria dados de teste.
 param(
     [Parameter(Mandatory = $true)][string]$GatewayBase,
-    [Parameter(Mandatory = $true)][string]$CommerceBase
+    [Parameter(Mandatory = $true)][string]$CommerceBase,
+    # Para antes do login do administrador (a conta exige troca de senha). Usado na coleta de evidências.
+    [switch]$ParaAntesDoAdmin
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +25,7 @@ function Chamar($base, $method, $path, $body, $headers = @{}) {
 
 function Exigir($ok, $description) {
     if (-not $ok) { throw "Falhou: $description" }
+    Write-Host ("OK {0} | {1}" -f (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss.fffK'), $description)
 }
 
 function Jwt($response) {
@@ -65,7 +68,7 @@ function CriarPeca($name) {
 
 $slug = CriarPeca "Vaso QA PI190 $unique"
 $checkout = @{
-    itens = @(@{ slug = $slug; quantidade = 1 }); freteId = 'padrao'; meio = 'pix'
+    itens = @(@{ slug = $slug; quantidade = 1 }); freteId = 'padrao'; meio = 'checkout_pro'
     endereco = @{ cep = '52021030'; endereco = 'Rua de teste, 100'; cidade = 'Recife'; estado = 'PE' }
 }
 $buyerHeader = @{ Authorization = "Bearer $buyerJwt"; 'Idempotency-Key' = "qa-pi190-$unique" }
@@ -84,13 +87,10 @@ Exigir ($competing.Status -eq 409) 'segunda compra da peça única recusada'
 $repeat = Chamar $GatewayBase 'POST' '/api/v1/checkout' $checkout $buyerHeader
 Exigir ($repeat.Data.dados.id -eq $orderId) 'replay idempotente do checkout'
 
-$withoutToken = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento" @{
-    eventoId = "qa-pagamento-$unique"; resultado = 'aprovado'
-}
-Exigir ($withoutToken.Status -eq 403) 'pagamento interno exige token'
-$paid = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento" @{
-    eventoId = "qa-pagamento-$unique"; resultado = 'aprovado'
-} @{ 'X-Balaio-Service-Token' = $token }
+# Pagamento simulado (balaio.pagamento.simulador.ativo=true): aprova pelo mesmo caminho do webhook.
+$withoutToken = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento-simulado" $null
+Exigir ($withoutToken.Status -eq 403) 'pagamento simulado exige token'
+$paid = Chamar $CommerceBase 'POST' "/internal/v1/pedidos/$orderId/pagamento-simulado" $null @{ 'X-Balaio-Service-Token' = $token }
 Exigir ($paid.Data.dados.estado -eq 'confirmado') 'confirmação simulada consome reserva'
 $sellerPending = Chamar $GatewayBase 'GET' '/api/v1/artesao/pedidos-pendentes' $null @{
     Authorization = "Bearer $artisanJwt"
@@ -128,6 +128,10 @@ $mediation = Chamar $GatewayBase 'POST' '/api/v1/admin/mediacoes' @{
 } @{ Authorization = "Bearer $buyerJwt" }
 Exigir ($mediation.Status -eq 201) 'abertura de mediação pelo comprador'
 $mediationId = $mediation.Data.dados.id
+if ($ParaAntesDoAdmin) {
+    Write-Output ("PEDIDO {0}" -f $orderId)
+    return
+}
 $adminEmail = LerConfig "$root/.env" 'ADMIN_EMAIL'
 $adminPassword = LerConfig "$root/.env" 'ADMIN_SENHA_INICIAL'
 $admin = Chamar $GatewayBase 'POST' '/api/v1/auth/login' @{
