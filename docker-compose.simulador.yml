@@ -1,0 +1,6 @@
+# Override para a demonstração com o provedor de pagamento simulado (só desenvolvimento).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.simulador.yml --profile extended up -d --build commerce-service
+services:
+  commerce-service:
+    environment:
+      BALAIO_PAGAMENTO_SIMULADOR_ATIVO: "true"

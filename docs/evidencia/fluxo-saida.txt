@@ -1,0 +1,44 @@
+**********************
+PowerShell transcript start
+Start time: 20261124225910
+Username: DESKTOP-A1T0M2G\chave
+RunAs User: DESKTOP-A1T0M2G\chave
+Configuration Name: 
+Machine: DESKTOP-A1T0M2G (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Program Files\WindowsApps\Microsoft.PowerShell_7.7.0.0_x64__8wekyb3d8bbwe\pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $__claudeCodeScript = $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT; $env:CLAUDE_CODE_SHELL_LAUNCHER_SCRIPT = $null; Invoke-Expression -Command $__claudeCodeScript
+Process ID: 18052
+PSVersion: 7.7.0
+PSEdition: Core
+GitCommitId: 7.7.0
+OS: Microsoft Windows 10.0.26200
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.4
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+OK 2026-11-24T22:59:11.139-03:00 | token interno configurado
+OK 2026-11-24T22:59:11.470-03:00 | cadastro do artesão pelo Gateway
+OK 2026-11-24T22:59:11.697-03:00 | cadastro do comprador pelo Gateway
+OK 2026-11-24T22:59:11.738-03:00 | publicação de peça única pelo Gateway
+OK 2026-11-24T22:59:11.941-03:00 | checkout e reserva
+OK 2026-11-24T22:59:11.946-03:00 | preço e frete calculados no servidor
+OK 2026-11-24T22:59:12.173-03:00 | cadastro do segundo comprador
+OK 2026-11-24T22:59:12.202-03:00 | segunda compra da peça única recusada
+OK 2026-11-24T22:59:12.236-03:00 | replay idempotente do checkout
+OK 2026-11-24T22:59:14.291-03:00 | pagamento simulado exige token
+OK 2026-11-24T22:59:16.363-03:00 | confirmação simulada consome reserva
+OK 2026-11-24T22:59:16.387-03:00 | pedido aparece no painel do ateliê
+OK 2026-11-24T22:59:16.406-03:00 | venda aparece para o ateliê
+OK 2026-11-24T22:59:16.413-03:00 | comprador não consulta pedidos do artesão
+OK 2026-11-24T22:59:16.432-03:00 | artesão não consulta lista de compradores
+OK 2026-11-24T22:59:16.437-03:00 | vendas exigem autenticação
+OK 2026-11-24T22:59:16.463-03:00 | produção restrita ao ateliê
+OK 2026-11-24T22:59:16.479-03:00 | pedido aceito saiu da fila pendente
+OK 2026-11-24T22:59:16.501-03:00 | mediação após produção
+OK 2026-11-24T22:59:16.535-03:00 | abertura de mediação pelo comprador
+PEDIDO 72618202-ac8d-40e1-af85-b0a10141654f
+**********************
+PowerShell transcript end
+End time: 20261124225916
+**********************
