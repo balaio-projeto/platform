@@ -20,8 +20,8 @@ function Registrar([string] $nome, [bool] $ok, [string] $detalhe = '') {
     $resultados.Add([pscustomobject]@{ Teste = $nome; Resultado = $(if ($ok) { 'OK' } else { 'FALHOU' }); Detalhe = $detalhe })
 }
 
-# Os bancos de commerce, community e events ficam no perfil "extended"; o storage no perfil "storage".
-$perfis = @('--profile', 'extended', '--profile', 'storage')
+# Os bancos de commerce, community e events ficam no perfil "extended".
+$perfis = @('--profile', 'extended')
 
 function Compose([string[]] $argumentos) {
     Push-Location $root
