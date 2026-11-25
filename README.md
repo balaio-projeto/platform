@@ -273,4 +273,6 @@ Média ± desvio padrão de 5 repetições. Interpretação:
 
 ### Evidência de funcionamento
 
-*A preencher (item 3.4 do plano): logs das chamadas entre serviços e a fila sendo drenada.*
+Execução registrada em `docs/evidencia/evidencia-fluxo.md`, com a saída do fluxo (`fluxo-saida.txt`) e o script `scripts/test-gateway-commerce-integration.ps1 -ParaAntesDoAdmin`. Em resumo, pelo gateway: cadastro de artesão e comprador, publicação, checkout com reserva, recusa da segunda compra, replay idempotente, pagamento simulado, pedido no painel, produção e abertura da mediação. Pelos efeitos nos bancos e nas mensagens: reserva da peça `CONSUMIDA` no catálogo, pedido `producao` com cinco etapas, dois e-mails enviados aos endereços devolvidos pelo profile, e mediação `aberta` no community.
+
+Não comprovado nesta execução: logs de chamadas HTTP entre serviços (os serviços não registram essas chamadas), decisão da mediação (exige login de administrador), e o tempo de drenagem nos dois modos, que está nos benchmarks.

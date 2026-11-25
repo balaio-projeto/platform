@@ -1,6 +1,0 @@
-Exception: C:\dev\Artesanato\Repo\platform\scripts\test-gateway-commerce-integration.ps1:25
-Line |
-  25 |      if (-not $ok) { throw "Falhou: $description" }
-     |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     | Falhou: login do administrador
-

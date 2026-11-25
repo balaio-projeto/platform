@@ -1,7 +1,9 @@
 # Roteiro manual de integracao do Gateway com o commerce; cria dados de teste.
 param(
     [Parameter(Mandatory = $true)][string]$GatewayBase,
-    [Parameter(Mandatory = $true)][string]$CommerceBase
+    [Parameter(Mandatory = $true)][string]$CommerceBase,
+    # Para antes do login do administrador (a conta exige troca de senha). Usado na coleta de evidências.
+    [switch]$ParaAntesDoAdmin
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +25,7 @@ function Chamar($base, $method, $path, $body, $headers = @{}) {
 
 function Exigir($ok, $description) {
     if (-not $ok) { throw "Falhou: $description" }
+    Write-Host ("OK {0} | {1}" -f (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss.fffK'), $description)
 }
 
 function Jwt($response) {
@@ -125,6 +128,10 @@ $mediation = Chamar $GatewayBase 'POST' '/api/v1/admin/mediacoes' @{
 } @{ Authorization = "Bearer $buyerJwt" }
 Exigir ($mediation.Status -eq 201) 'abertura de mediação pelo comprador'
 $mediationId = $mediation.Data.dados.id
+if ($ParaAntesDoAdmin) {
+    Write-Output ("PEDIDO {0}" -f $orderId)
+    return
+}
 $adminEmail = LerConfig "$root/.env" 'ADMIN_EMAIL'
 $adminPassword = LerConfig "$root/.env" 'ADMIN_SENHA_INICIAL'
 $admin = Chamar $GatewayBase 'POST' '/api/v1/auth/login' @{
